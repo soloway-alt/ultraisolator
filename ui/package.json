@@ -66,6 +66,7 @@
       "backend-manifest.json",
       "electron-preload.js",
       "shared/**/*",
+      "main/**/*",
       "dist/**/*",
       "assets/**/*",
       "package.json"

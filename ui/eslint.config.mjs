@@ -51,7 +51,7 @@ export default [
   },
   {
     // CommonJS main-process and tooling files.
-    files: ['electron-main.js', 'backend-runtime.js', 'electron-preload.js', 'scripts/**/*.js', 'playwright.config.js'],
+    files: ['electron-main.js', 'backend-runtime.js', 'electron-preload.js', 'main/**/*.js', 'scripts/**/*.js', 'playwright.config.js'],
     languageOptions: {
       sourceType: 'commonjs',
       globals: { ...globals.node }
