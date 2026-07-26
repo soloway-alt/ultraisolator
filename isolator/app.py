@@ -310,6 +310,8 @@ class EsportsIsolatorPro(
         self._reported_failure_ttl_s = 3600.0
         self._reported_failure_limit = 5000
         self._reported_failure_message_chars = 96
+        self._reported_failure_prune_interval_s = 60.0
+        self._last_reported_failure_prune = 0.0
         anti_cheat_mode = parsed.anti_cheat_mode
         if anti_cheat_mode not in ("aggressive", "conservative"):
             self._log_once(
@@ -367,8 +369,8 @@ class EsportsIsolatorPro(
 
     def get_runtime_status(self):
         """Return a small read-only runtime snapshot for localhost UI bridges."""
-        monitor_thread = self._monitor_thread
         with self._state_lock:
+            monitor_thread = self._monitor_thread
             touched_entries = [
                 (int(pid), entry.get("name", ""), entry.get("source", ""))
                 for pid, entry in self._touched.items()
@@ -386,6 +388,15 @@ class EsportsIsolatorPro(
             # swapped by a concurrent _refresh_topology on the monitor thread.
             cpu_partitions = self._cpu_partitions
             topology_available = bool(self._topology)
+            # Scalars the monitor thread mutates during power-scheme and timer
+            # transitions; reading them under the same lock keeps the reported
+            # status from mixing a pre-switch and post-switch view.
+            is_admin = bool(self._is_admin)
+            power_plan_active = bool(self._power_plan_active)
+            power_scheme_in_use = self._power_scheme_in_use
+            timer_resolution_applied = self._timer_resolution_applied
+            persistent_recovery_incomplete = bool(self._persistent_recovery_incomplete)
+            capability_notes = list(self._capability_notes)
 
         jailed_count = 0
         foreground_count = 0
@@ -428,15 +439,15 @@ class EsportsIsolatorPro(
             "active_mutations": active_mutations,
             "shutting_down": shutting_down,
             "shutdown_done": shutdown_done,
-            "admin": bool(self._is_admin),
+            "admin": is_admin,
             "anti_cheat_mode": self.anti_cheat_mode,
             "background_jailing": bool(self.enable_background_jailing),
-            "power_plan_active": bool(self._power_plan_active),
-            "power_scheme_in_use": self._power_scheme_in_use,
-            "timer_resolution_applied": self._timer_resolution_applied,
-            "persistent_recovery_incomplete": bool(self._persistent_recovery_incomplete),
+            "power_plan_active": power_plan_active,
+            "power_scheme_in_use": power_scheme_in_use,
+            "timer_resolution_applied": timer_resolution_applied,
+            "persistent_recovery_incomplete": persistent_recovery_incomplete,
             "reported_failure_count": reported_failure_count,
-            "capability_notes": list(self._capability_notes),
+            "capability_notes": capability_notes,
             "capability_issues": capability_issues,
             "discovery_issues": discovery_issues,
             "cpu_partitions": partition_counts,

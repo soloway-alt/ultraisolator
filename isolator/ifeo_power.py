@@ -526,8 +526,11 @@ class IfeoPowerMixin:
             if self._set_power_scheme(guid):
                 active = self._get_active_power_scheme()
                 if self._guids_equal(active, guid):
-                    self._power_plan_active = True
-                    self._power_scheme_in_use = label
+                    # Publish the pair under the state lock so the API thread's
+                    # get_runtime_status never reports a half-switched view.
+                    with self._state_lock:
+                        self._power_plan_active = True
+                        self._power_scheme_in_use = label
                     self._log(f"[INFO] Activated {label} performance power scheme.")
                     return True
                 self._log_once(
@@ -586,8 +589,9 @@ class IfeoPowerMixin:
                 )
             self._power_scheme_set_unverified = False
             self._power_scheme_unverified_in_use = None
-            self._power_plan_active = False
-            self._power_scheme_in_use = None
+            with self._state_lock:
+                self._power_plan_active = False
+                self._power_scheme_in_use = None
             return
         if self._original_power_scheme and self._power_plan_active:
             expected_active = None
@@ -602,8 +606,9 @@ class IfeoPowerMixin:
                     "[INFO] Active power scheme changed externally; preserving the user's current scheme.",
                 )
                 self._clear_power_recovery_state()
-                self._power_plan_active = False
-                self._power_scheme_in_use = None
+                with self._state_lock:
+                    self._power_plan_active = False
+                    self._power_scheme_in_use = None
                 return
             if not self._set_power_scheme(self._original_power_scheme):
                 self._log_once(("restore_power_scheme",), "[WARN] Failed to restore the original power scheme.")
@@ -618,7 +623,8 @@ class IfeoPowerMixin:
                 self._clear_power_recovery_state()
         else:
             self._clear_power_recovery_state()
-        self._power_plan_active = False
-        self._power_scheme_in_use = None
+        with self._state_lock:
+            self._power_plan_active = False
+            self._power_scheme_in_use = None
         self._power_scheme_set_unverified = False
         self._power_scheme_unverified_in_use = None

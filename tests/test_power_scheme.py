@@ -1,3 +1,4 @@
+import threading
 import unittest
 from pathlib import Path
 
@@ -15,6 +16,7 @@ class DummyPower(IfeoPowerMixin):
         self.original_guid = make_guid(BALANCED_GUID)
         self.custom_guid = make_guid(CUSTOM_GUID)
         self._original_power_scheme = self.original_guid
+        self._state_lock = threading.Lock()
         self._power_plan_active = False
         self._power_scheme_in_use = None
         self._disable_power_scheme_switch = False

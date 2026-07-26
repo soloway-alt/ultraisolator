@@ -109,11 +109,25 @@ class BaseMixin:
         now = time.monotonic()
         dedup_key = self._dedup_log_key(key, message)
         with self._state_lock:
-            self._prune_reported_failures_locked(now)
+            # Pruning walks a copy of a dict capped at _reported_failure_limit
+            # (5000) entries while holding the lock the API thread needs, and
+            # _log_once fires per-process on jail/restore paths — so amortize
+            # the full TTL sweep to once a minute. The over-limit eviction
+            # below stays exact, which keeps the cap enforced between sweeps.
+            prune_interval = float(getattr(self, "_reported_failure_prune_interval_s", 60.0))
+            if now - float(getattr(self, "_last_reported_failure_prune", 0.0)) >= prune_interval:
+                self._last_reported_failure_prune = now
+                self._prune_reported_failures_locked(now)
             if dedup_key in self._reported_failures:
+                # TTL is checked inline (O(1)) so relogging after expiry does
+                # not depend on the amortized sweep above having run.
+                seen_at = float(self._reported_failures.get(dedup_key, 0.0))
+                ttl = float(getattr(self, "_reported_failure_ttl_s", 3600.0))
+                if ttl <= 0 or now - seen_at < ttl:
+                    self._reported_failures.pop(dedup_key, None)
+                    self._reported_failures[dedup_key] = now
+                    return
                 self._reported_failures.pop(dedup_key, None)
-                self._reported_failures[dedup_key] = now
-                return
             while len(self._reported_failures) >= self._reported_failure_limit:
                 oldest = next(iter(self._reported_failures), None)
                 if oldest is None:

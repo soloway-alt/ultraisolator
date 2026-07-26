@@ -105,6 +105,22 @@ class LoggingTests(unittest.TestCase):
 
         self.assertEqual(["first", "second"], isolator.messages)
 
+    def test_log_once_amortizes_full_prune_to_the_interval(self):
+        isolator = self._make_isolator()
+        prune_calls = []
+        original_prune = isolator._prune_reported_failures_locked
+        isolator._prune_reported_failures_locked = lambda now=None: prune_calls.append(now) or original_prune(now)
+
+        clock = iter(float(i) for i in range(200))
+        with patch("isolator.base.time.monotonic", side_effect=lambda: next(clock)):
+            for index in range(100):
+                isolator._log_once(("spam", index), f"message {index}")
+
+        # One sweep when the interval first elapses (monotonic starts at 0 and
+        # _last_reported_failure_prune starts at 0), then one per 60s window.
+        self.assertLessEqual(len(prune_calls), 2)
+        self.assertEqual(100, len(isolator.messages))
+
 
 if __name__ == "__main__":
     unittest.main()
