@@ -60,12 +60,14 @@ export function ReadinessChecklist({ live }) {
   // reads as absent, matching the old machine that cleared it on bail.
   const payload = enabled ? state.data : null;
 
-  const checks = Array.isArray(payload?.checks) ? payload.checks : [];
   const summary = payload?.summary || {};
-  const topChecks = useMemo(() => [...checks].sort((left, right) => (
-    (STATUS_ORDER[left.status] ?? 3) - (STATUS_ORDER[right.status] ?? 3)
-    || checkOrder(left) - checkOrder(right)
-  )).slice(0, 9), [checks]);
+  const topChecks = useMemo(() => {
+    const checks = Array.isArray(payload?.checks) ? payload.checks : [];
+    return [...checks].sort((left, right) => (
+      (STATUS_ORDER[left.status] ?? 3) - (STATUS_ORDER[right.status] ?? 3)
+      || checkOrder(left) - checkOrder(right)
+    )).slice(0, 9);
+  }, [payload?.checks]);
   const nextAction = topChecks.find((check) => check.status === 'error')
     || topChecks.find((check) => check.status === 'warning');
 

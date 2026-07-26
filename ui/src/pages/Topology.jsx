@@ -41,13 +41,16 @@ export const TopologyPage = memo(function TopologyPage({ live, page }) {
 
   const cores = Array.isArray(topology?.cores) ? topology.cores : [];
   const llcGroups = useMemo(
-    () => groupCoresByLlc(cores, Array.isArray(topology?.llc_groups) ? topology.llc_groups : []),
-    [cores, topology?.llc_groups]
+    () => groupCoresByLlc(
+      Array.isArray(topology?.cores) ? topology.cores : [],
+      Array.isArray(topology?.llc_groups) ? topology.llc_groups : []
+    ),
+    [topology?.cores, topology?.llc_groups]
   );
-  const selectedCore = useMemo(
-    () => cores.find((core) => core.id === selectedCoreId) || cores[0] || null,
-    [cores, selectedCoreId]
-  );
+  const selectedCore = useMemo(() => {
+    const list = Array.isArray(topology?.cores) ? topology.cores : [];
+    return list.find((core) => core.id === selectedCoreId) || list[0] || null;
+  }, [topology?.cores, selectedCoreId]);
   const partitions = topology?.partitions || {};
   const summary = topology?.summary || {};
   const partitionLabel = (partition) => t(`topology.partition.${partition}`, PARTITION_FALLBACK_LABELS[partition] || PARTITION_LABELS[partition] || partition);

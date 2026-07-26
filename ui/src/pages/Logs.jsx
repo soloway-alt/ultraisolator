@@ -62,6 +62,8 @@ export const LogsPage = memo(function LogsPage({ live, page }) {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [query, setQuery] = useState('');
   const logsResource = useBackendResource(`/api/logs?limit=${LOG_LIMIT}`, { enabled });
+  // reload is a stable useCallback from useBackendResource.
+  const { reload } = logsResource;
   const payload = logsResource.data;
 
   useEffect(() => {
@@ -75,13 +77,13 @@ export const LogsPage = memo(function LogsPage({ live, page }) {
       return undefined;
     }
     const timer = window.setInterval(() => {
-      logsResource.reload();
+      reload();
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [enabled, logsResource.reload]);
+  }, [enabled, reload]);
 
-  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
   const categories = useMemo(() => {
+    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
     const unique = new Set();
     for (const entry of entries) {
       if (entry.category) {
@@ -89,9 +91,10 @@ export const LogsPage = memo(function LogsPage({ live, page }) {
       }
     }
     return Array.from(unique).sort();
-  }, [entries]);
+  }, [payload?.entries]);
 
   const filteredEntries = useMemo(() => {
+    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
     const needle = query.trim().toLowerCase();
     return entries.filter((entry) => {
       if (severityFilter !== 'all' && entry.severity !== severityFilter) {
@@ -113,20 +116,23 @@ export const LogsPage = memo(function LogsPage({ live, page }) {
         String(entry.line)
       ].some((value) => String(value || '').toLowerCase().includes(needle));
     });
-  }, [entries, severityFilter, categoryFilter, query]);
+  }, [payload?.entries, severityFilter, categoryFilter, query]);
 
-  const counts = useMemo(() => entries.reduce(
-    (acc, entry) => {
-      acc.total += 1;
-      if (entry.severity === 'warning') {
-        acc.warning += 1;
-      } else if (entry.severity === 'error') {
-        acc.error += 1;
-      }
-      return acc;
-    },
-    { total: 0, warning: 0, error: 0 }
-  ), [entries]);
+  const counts = useMemo(() => {
+    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+    return entries.reduce(
+      (acc, entry) => {
+        acc.total += 1;
+        if (entry.severity === 'warning') {
+          acc.warning += 1;
+        } else if (entry.severity === 'error') {
+          acc.error += 1;
+        }
+        return acc;
+      },
+      { total: 0, warning: 0, error: 0 }
+    );
+  }, [payload?.entries]);
 
   return (
     <section className="page logs-page" aria-labelledby="logs-title">

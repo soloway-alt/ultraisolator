@@ -46,13 +46,14 @@ export const AdvancedToolsPage = memo(function AdvancedToolsPage({ live, page })
   const devices = Array.isArray(payload?.devices) ? payload.devices : [];
   const summary = payload?.summary || { total: 0, enabled: 0, disabled: 0, unknown: 0 };
   const byClass = useMemo(() => {
+    const list = Array.isArray(payload?.devices) ? payload.devices : [];
     const counts = new Map();
-    for (const device of devices) {
+    for (const device of list) {
       const label = deviceClassLabel(device.device_class, t);
       counts.set(label, (counts.get(label) || 0) + 1);
     }
     return Array.from(counts.entries()).map(([deviceClass, count]) => `${deviceClass}: ${count}`).join(' / ') || t('advanced.noDevices', 'No devices loaded');
-  }, [devices, t]);
+  }, [payload?.devices, t]);
 
   return (
     <section className="page advanced-tools-page" aria-labelledby="advanced-tools-title">

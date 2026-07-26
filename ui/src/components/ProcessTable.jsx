@@ -81,8 +81,9 @@ export function ProcessTable({ snapshot }) {
   const normalizedQuery = deferredQuery.trim().toLowerCase();
 
   const filteredProcesses = useMemo(() => {
+    const list = Array.isArray(snapshot?.processes) ? snapshot.processes : [];
     const rows = [];
-    for (const process of processes) {
+    for (const process of list) {
       if (
         processMatchesFilter(process, processFilter)
         && processMatchesQuery(process, normalizedQuery)
@@ -91,7 +92,7 @@ export function ProcessTable({ snapshot }) {
       }
     }
     return rows;
-  }, [processes, processFilter, normalizedQuery]);
+  }, [snapshot?.processes, processFilter, normalizedQuery]);
 
   return (
     <Tile className="module-surface process-module">

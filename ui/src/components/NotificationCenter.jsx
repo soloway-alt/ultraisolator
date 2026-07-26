@@ -41,10 +41,10 @@ export const NotificationCenter = memo(function NotificationCenter({ notificatio
   const toastsEnabled = settings.notificationToastsEnabled !== false;
 
   useEffect(() => {
-    if (!toastsEnabled || gameMode || notifications.length === 0) {
+    const nextNotification = Array.isArray(liveNotifications) ? liveNotifications[0] : undefined;
+    if (!toastsEnabled || gameMode || !nextNotification) {
       return;
     }
-    const nextNotification = notifications[0];
     if (
       seenToastIds.current.has(nextNotification.id)
       || (nextNotification.suppress_in_game_mode && gameMode)
@@ -53,7 +53,7 @@ export const NotificationCenter = memo(function NotificationCenter({ notificatio
     }
     seenToastIds.current.add(nextNotification.id);
     setToastIds((current) => [nextNotification.id, ...current].slice(0, 3));
-  }, [gameMode, notifications, toastsEnabled]);
+  }, [gameMode, liveNotifications, toastsEnabled]);
 
   useEffect(() => {
     if (toastIds.length === 0) {
@@ -68,9 +68,10 @@ export const NotificationCenter = memo(function NotificationCenter({ notificatio
   }, [toastIds]);
 
   const toastNotifications = useMemo(() => {
+    const list = Array.isArray(liveNotifications) ? liveNotifications : [];
     const active = new Set(toastIds);
-    return notifications.filter((notification) => active.has(notification.id));
-  }, [notifications, toastIds]);
+    return list.filter((notification) => active.has(notification.id));
+  }, [liveNotifications, toastIds]);
 
   return (
     <>

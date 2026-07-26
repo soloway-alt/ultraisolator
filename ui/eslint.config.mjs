@@ -35,9 +35,10 @@ export default [
       'react/jsx-uses-react': 'error',
       'react/jsx-uses-vars': 'error',
       'react-hooks/rules-of-hooks': 'error',
-      // Warn (not error) until the existing dependency-array gaps are fixed
-      // deliberately; new violations still surface in review and CI logs.
-      'react-hooks/exhaustive-deps': 'warn',
+      // The dependency-array gaps were fixed deliberately (unstable
+      // `Array.isArray(x) ? x : []` fallbacks moved inside the callbacks);
+      // error keeps new violations from slipping through silently.
+      'react-hooks/exhaustive-deps': 'error',
       'unused-imports/no-unused-imports': 'error',
       // Interpolation goes through t(key, fallback, params); string-replacing
       // {{tokens}} on translated output bypasses the catalog parameters.
