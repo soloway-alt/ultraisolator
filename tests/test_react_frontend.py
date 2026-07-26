@@ -28,7 +28,7 @@ class ReactFrontendContractTests(unittest.TestCase):
             for name, version in package[group_name].items():
                 self.assertNotRegex(version, r"^[~^>=<*]", f"{name} should be pinned")
 
-    def test_layout_has_sidebar_navigation_and_three_placeholder_pages(self):
+    def test_layout_has_sidebar_navigation_and_page_registry(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
 
         self.assertIn("Dashboard", app)
@@ -36,7 +36,10 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("Topology", app)
         self.assertIn("SideNav", app)
         self.assertIn("useLiveSnapshot", app)
-        self.assertIn("placeholder", app.lower())
+        # Every navigable page id must resolve to a real component; the
+        # Placeholder fallback was removed once PAGE_COMPONENTS covered PAGES.
+        self.assertIn("PAGE_COMPONENTS[activePage.id]", app)
+        self.assertNotIn("Placeholder", app)
 
     def test_renderer_is_split_into_pages_components_constants_and_utils(self):
         expected_files = (
@@ -49,7 +52,6 @@ class ReactFrontendContractTests(unittest.TestCase):
             "components/PageHeading.jsx",
             "components/StatusTag.jsx",
             "pages/Dashboard.jsx",
-            "pages/Placeholder.jsx",
             "pages/Settings.jsx",
             "pages/Topology.jsx",
             "utils/appSettings.js",

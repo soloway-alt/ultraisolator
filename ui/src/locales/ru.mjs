@@ -29,7 +29,6 @@ export const ru = {
     'common.shown': 'показано',
     'common.readonly': 'только чтение',
     'common.unavailable': 'недоступно',
-    'common.placeholder': 'Заглушка',
     'errorBoundary.title': 'UI аварийно остановлен',
     'errorBoundary.detail': 'Обновите панель, чтобы заново подключиться к локальному API.',
     'dashboard.gameMode': 'Оптимизация игры',

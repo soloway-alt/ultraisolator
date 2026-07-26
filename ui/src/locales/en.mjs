@@ -29,7 +29,6 @@ export const en = {
     'common.shown': 'shown',
     'common.readonly': 'read-only',
     'common.unavailable': 'unavailable',
-    'common.placeholder': 'Placeholder',
     'errorBoundary.title': 'Something went wrong',
     'errorBoundary.detail': 'Reload the dashboard to reconnect to the local API.',
     'dashboard.gameMode': 'Optimizing game',

@@ -13,8 +13,7 @@ function normalizeSnapshot(snapshot) {
   const processes = Array.isArray(snapshot?.processes) ? snapshot.processes : [];
   return {
     ...snapshot,
-    processes,
-    processByPid: new Map(processes.map((process) => [process.pid, process]))
+    processes
   };
 }
 

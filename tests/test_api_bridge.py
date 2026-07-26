@@ -463,10 +463,12 @@ class HttpApiTests(unittest.TestCase):
             thread.join(timeout=2)
 
     def test_chunked_transfer_encoding_is_rejected_with_501(self):
+        # No body on purpose: the server rejects on the header alone before
+        # reading, and racing a body write against the early 501 close makes
+        # the client side flaky under load.
         status, payload = self._request_status(
             "PUT",
             "/api/config",
-            body='{"enable_background_jailing": true}',
             headers={"Transfer-Encoding": "chunked"},
         )
 

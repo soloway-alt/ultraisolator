@@ -11,7 +11,6 @@ import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { PAGES } from './constants/navigation.js';
 import { useLiveSnapshot } from './hooks/useLiveSnapshot.js';
 import { DashboardPage } from './pages/Dashboard.jsx';
-import { PlaceholderPage } from './pages/Placeholder.jsx';
 import { SettingsPage } from './pages/Settings.jsx';
 import { TopologyPage } from './pages/Topology.jsx';
 import { LogsPage } from './pages/Logs.jsx';
@@ -41,7 +40,9 @@ function AppShell() {
     () => PAGES.find((page) => page.id === activePageId) || PAGES[0],
     [activePageId]
   );
-  const ActivePage = PAGE_COMPONENTS[activePage.id] || PlaceholderPage;
+  // PAGE_COMPONENTS covers every id in PAGES; pageIdFromHash falls back to
+  // 'dashboard' for unknown hashes, so the lookup can never miss.
+  const ActivePage = PAGE_COMPONENTS[activePage.id];
 
   useEffect(() => {
     const onHashChange = () => setActivePageId(pageIdFromHash());
