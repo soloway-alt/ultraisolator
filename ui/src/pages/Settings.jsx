@@ -8,7 +8,7 @@ import { CONFIG_PRESETS, CONFIG_SECTIONS, DEFAULT_APP_SETTINGS } from '../consta
 import { LANGUAGES, useI18n } from '../i18n.jsx';
 import { useAppSettings } from '../state/AppSettingsContext.jsx';
 import { requestJson } from '../utils/api.mjs';
-import { EMPTY_APP_PROFILE, fieldLabel, toEditableConfig, validateConfigDraft } from '../utils/config.mjs';
+import { EMPTY_APP_PROFILE, toEditableConfig, translatedNotice, validateConfigDraft } from '../utils/config.mjs';
 
 function displayConfigPath(configPath) {
   if (!configPath) {
@@ -16,17 +16,6 @@ function displayConfigPath(configPath) {
   }
   const parts = String(configPath).split(/[\\/]/).filter(Boolean);
   return parts.at(-1) || 'config.json';
-}
-
-function translatedNotice(notice, t) {
-  if (!notice || typeof notice === 'string') {
-    return notice;
-  }
-  const params = { ...(notice.params || {}) };
-  if (notice.field) {
-    params.field = t(`field.${notice.field}`, fieldLabel(notice.field));
-  }
-  return t(notice.key, notice.fallback, params);
 }
 
 export function SettingsPage({ live }) {

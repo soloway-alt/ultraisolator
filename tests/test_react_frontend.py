@@ -474,7 +474,12 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertNotIn("resolveBackendToken", hook)
         self.assertNotIn("from '../utils/api.mjs'", hook)
         self.assertIn("from '../utils/api.mjs'", settings)
-        self.assertIn("from '../utils/api.mjs'", topology)
+        # Read-only pages go through the shared resource hook, which is the
+        # only place that touches the requestJson funnel for them.
+        backend_resource = (SRC / "hooks" / "useBackendResource.js").read_text(encoding="utf-8")
+        self.assertIn("from '../utils/api.mjs'", backend_resource)
+        self.assertIn("from '../hooks/useBackendResource.js'", topology)
+        self.assertNotIn("from '../utils/api.mjs'", topology)
 
     def test_locales_are_split_and_primary_copy_uses_plain_language(self):
         i18n = (SRC / "i18n.jsx").read_text(encoding="utf-8")

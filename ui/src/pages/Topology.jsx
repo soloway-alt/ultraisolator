@@ -4,7 +4,8 @@ import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
 import { PARTITION_LABELS } from '../constants/topology.mjs';
-import { requestJson } from '../utils/api.mjs';
+import { useBackendResource } from '../hooks/useBackendResource.js';
+import { translatedNotice } from '../utils/config.mjs';
 import { formatCacheSize, formatCoreLabel, formatCpuSets } from '../utils/format.mjs';
 import { groupCoresByLlc } from '../utils/topology.js';
 import { useI18n } from '../i18n.jsx';
@@ -26,38 +27,17 @@ const CORE_TYPE_FALLBACK_LABELS = {
 export function TopologyPage({ live }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
-  const [topology, setTopology] = useState(null);
   const [selectedCoreId, setSelectedCoreId] = useState(null);
-  const [topologyState, setTopologyState] = useState({
-    loading: true,
-    refreshing: false,
-    error: null
-  });
-
-  const loadTopology = async (refresh = false) => {
-    setTopologyState((current) => ({
-      ...current,
-      loading: !topology,
-      refreshing: Boolean(refresh),
-      error: null
-    }));
-    try {
-      const snapshot = await requestJson(`/api/topology${refresh ? '?refresh=1' : ''}`);
-      setTopology(snapshot);
-      setSelectedCoreId((current) => current || snapshot.cores?.[0]?.id || null);
-      setTopologyState({ loading: false, refreshing: false, error: null });
-    } catch (error) {
-      setTopologyState({
-        loading: false,
-        refreshing: false,
-        error: error instanceof Error ? error.message : t('topology.unavailable', 'Unable to load topology')
-      });
-    }
-  };
+  // The initial load also refreshes: the CPU map must reflect the current
+  // partitioning, not a cached snapshot.
+  const topologyResource = useBackendResource('/api/topology?refresh=1');
+  const topology = topologyResource.data;
 
   useEffect(() => {
-    loadTopology(true);
-  }, []);
+    if (topology) {
+      setSelectedCoreId((current) => current || topology.cores?.[0]?.id || null);
+    }
+  }, [topology]);
 
   const cores = Array.isArray(topology?.cores) ? topology.cores : [];
   const llcGroups = useMemo(
@@ -93,13 +73,13 @@ export function TopologyPage({ live }) {
             : t('topology.readOnly', 'Read-only CPU map')}
         </div>
         <div className="settings-actions">
-          <button type="button" onClick={() => loadTopology(true)} disabled={topologyState.refreshing}>
-            {topologyState.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
+          <button type="button" onClick={topologyResource.reload} disabled={topologyResource.loading || topologyResource.refreshing}>
+            {topologyResource.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
           </button>
         </div>
       </div>
 
-      {topologyState.error ? <div className="action-error">{topologyState.error}</div> : null}
+      {topologyResource.error ? <div className="action-error">{translatedNotice(topologyResource.error, t)}</div> : null}
 
       <div className="kpi-strip topology-summary-grid" aria-label="Topology summary">
         <KpiCell label={t('topology.totalCores', 'Total Cores')} value={summary.core_count ?? cores.length} detail={t('topology.logicalProcessors', '{{count}} logical processors').replace('{{count}}', summary.logical_processor_count ?? 0)} highlight />
@@ -125,7 +105,7 @@ export function TopologyPage({ live }) {
             </div>
           </div>
 
-          {topologyState.loading ? (
+          {topologyResource.loading ? (
             <div className="module-empty">{t('topology.loading', 'Loading topology')}</div>
           ) : cores.length ? (
             <div className="llc-group-list">

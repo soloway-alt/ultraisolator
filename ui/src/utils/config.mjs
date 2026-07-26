@@ -17,6 +17,19 @@ function validationError(key, fallback, params = {}, field = null) {
   return { key: `validation.${key}`, fallback, params, field };
 }
 
+// Renders a structured notice ({key, fallback, params, field?}) through the
+// catalog; plain strings pass through untouched.
+export function translatedNotice(notice, t) {
+  if (!notice || typeof notice === 'string') {
+    return notice;
+  }
+  const params = { ...(notice.params || {}) };
+  if (notice.field) {
+    params.field = t(`field.${notice.field}`, fieldLabel(notice.field));
+  }
+  return t(notice.key, notice.fallback, params);
+}
+
 export function parseListValue(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
