@@ -337,7 +337,22 @@ class DiscoveryMixin:
                     path=vdf_path,
                     error=type(exc).__name__,
                 )
-        steam_games = set()
+        steam_games = self._scan_launcher_library("steam", library_paths, set())
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._steam_games_cache = steam_games
+
+    def _scan_launcher_library(self, provider, library_paths, out_set):
+        """Walk one provider's library roots into out_set under the scan budget.
+
+        Shared loop for every launcher scanner: dedupe roots, skip missing
+        ones, walk each with _scan_for_game_exes under one wall-clock budget,
+        and record provider-prefixed discovery issues
+        (f"{provider}_library_unavailable" / "_library_scan_failed" /
+        "_scan_budget_exceeded") on failure. The caller keeps its
+        provider-specific root discovery and publishes the returned set to
+        its cache attribute under _state_lock.
+        """
         seen_paths = set()
         deadline = time.monotonic() + LIBRARY_SCAN_BUDGET_S
         for lib in library_paths:
@@ -346,24 +361,22 @@ class DiscoveryMixin:
                 continue
             seen_paths.add(path_key)
             if not os.path.exists(lib):
-                self._record_discovery_issue("steam_library_unavailable", path=lib)
+                self._record_discovery_issue(f"{provider}_library_unavailable", path=lib)
                 continue
             try:
-                completed = self._scan_for_game_exes(lib, steam_games, max_depth=4, deadline=deadline)
+                completed = self._scan_for_game_exes(lib, out_set, max_depth=4, deadline=deadline)
             except OSError as exc:
                 self._record_discovery_issue(
-                    "steam_library_scan_failed",
+                    f"{provider}_library_scan_failed",
                     path=lib,
                     error=type(exc).__name__,
                 )
                 continue
             if not completed:
                 if not self._stop_event.is_set():
-                    self._record_discovery_issue("steam_scan_budget_exceeded", path=lib)
+                    self._record_discovery_issue(f"{provider}_scan_budget_exceeded", path=lib)
                 break
-        # Publish atomically for readers on the monitor/API threads.
-        with self._state_lock:
-            self._steam_games_cache = steam_games
+        return out_set
 
     @staticmethod
     def _steam_common_directory(path):
@@ -516,29 +529,7 @@ class DiscoveryMixin:
         paths.extend(manifest_paths)
         if not paths:
             self._record_discovery_issue("epic_install_not_found")
-        seen_paths = set()
-        deadline = time.monotonic() + LIBRARY_SCAN_BUDGET_S
-        for lib in paths:
-            path_key = os.path.normcase(os.path.abspath(lib))
-            if path_key in seen_paths:
-                continue
-            seen_paths.add(path_key)
-            if not os.path.exists(lib):
-                self._record_discovery_issue("epic_library_unavailable", path=lib)
-                continue
-            try:
-                completed = self._scan_for_game_exes(lib, epic_games, max_depth=4, deadline=deadline)
-            except OSError as exc:
-                self._record_discovery_issue(
-                    "epic_library_scan_failed",
-                    path=lib,
-                    error=type(exc).__name__,
-                )
-                continue
-            if not completed:
-                if not self._stop_event.is_set():
-                    self._record_discovery_issue("epic_scan_budget_exceeded", path=lib)
-                break
+        epic_games = self._scan_launcher_library("epic", paths, epic_games)
         # Publish atomically for readers on the monitor/API threads.
         with self._state_lock:
             self._epic_games_cache = epic_games

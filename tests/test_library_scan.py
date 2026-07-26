@@ -98,6 +98,30 @@ class LibraryScanWorkerTests(unittest.TestCase):
             self.assertTrue(completed)
             self.assertEqual({"somegame.exe"}, found)
 
+    def test_scan_launcher_library_budget_overrun_records_provider_issue(self):
+        isolator = _make_isolator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            isolator._scan_for_game_exes = lambda *args, **kwargs: False
+
+            result = isolator._scan_launcher_library("fake", [tmpdir], set())
+
+        self.assertEqual(set(), result)
+        with isolator._state_lock:
+            codes = [issue["code"] for issue in isolator._discovery_issues]
+        self.assertIn("fake_scan_budget_exceeded", codes)
+
+    def test_scan_launcher_library_stop_event_abort_records_nothing(self):
+        isolator = _make_isolator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            isolator._scan_for_game_exes = lambda *args, **kwargs: False
+            isolator._stop_event.set()
+
+            isolator._scan_launcher_library("fake", [tmpdir], set())
+
+        with isolator._state_lock:
+            issues = list(isolator._discovery_issues)
+        self.assertEqual([], issues)
+
     def test_steam_budget_overrun_records_discovery_issue(self):
         isolator = _make_isolator()
         with tempfile.TemporaryDirectory() as tmpdir:
