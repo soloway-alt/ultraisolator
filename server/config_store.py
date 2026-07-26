@@ -3,6 +3,8 @@
 import json
 import math
 import os
+import tempfile
+import threading
 
 
 DEFAULT_CONFIG = {
@@ -285,6 +287,9 @@ def _validate_field(field, value, spec):
 class ConfigStore:
     def __init__(self, config_path="config.json"):
         self.config_path = config_path
+        # Serializes update()'s read-modify-write; the ThreadingHTTPServer
+        # drives one store instance from concurrent request threads.
+        self._write_lock = threading.Lock()
 
     def defaults_response(self):
         return {
@@ -360,26 +365,30 @@ class ConfigStore:
         return config
 
     def update(self, candidate, running=False):
-        loaded, _exists = self.read_raw()
-        merged = dict(loaded)
-        merged.update(candidate)
-        config = self.validate(merged, partial=True)
-        directory = os.path.dirname(os.path.abspath(self.config_path))
-        os.makedirs(directory, exist_ok=True)
-        tmp = self.config_path + ".tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as handle:
-                json.dump(config, handle, indent=2, allow_nan=False)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(tmp, self.config_path)
-        except Exception:
+        with self._write_lock:
+            loaded, _exists = self.read_raw()
+            merged = dict(loaded)
+            merged.update(candidate)
+            config = self.validate(merged, partial=True)
+            directory = os.path.dirname(os.path.abspath(self.config_path))
+            os.makedirs(directory, exist_ok=True)
+            # A unique temp file per write so overlapping writers (other
+            # ConfigStore instances on the same path) can never truncate or
+            # publish each other's partial content.
+            fd, tmp = tempfile.mkstemp(dir=directory, suffix=".tmp")
             try:
-                os.remove(tmp)
-            except OSError:
-                pass
-            raise
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(config, handle, indent=2, allow_nan=False)
+                    handle.write("\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, self.config_path)
+            except Exception:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                raise
         return {
             "ok": True,
             "config": config,

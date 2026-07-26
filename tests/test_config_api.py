@@ -72,6 +72,52 @@ class ConfigStoreTests(unittest.TestCase):
                 os.path.normcase(os.path.realpath(saved["log_file"])),
             )
 
+    def test_concurrent_updates_preserve_every_field_and_the_file_stays_valid(self):
+        updates = {
+            "housekeeping_cores": 2,
+            "poll_interval_idle_ms": 1500,
+            "poll_interval_active_ms": 2500,
+            "maintenance_jail_batch_size": 6,
+            "maintenance_jail_interval_ms": 31000,
+            "maintenance_jail_batch_cooldown_ms": 6000,
+            "game_close_debounce_s": 4,
+            "game_exit_restore_delay_s": 11,
+            "gc_full_collect_interval_s": 1900,
+            "maintenance_skip_after_quiet_cycles": 4,
+            "enable_background_jailing": True,
+            "disable_timer_resolution_tweak": True,
+            "disable_game_priority_boost": True,
+            "disable_power_scheme_switch": True,
+            "auto_detect_steam_games": False,
+            "auto_detect_epic_games": False,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.json"
+            store = ConfigStore(str(config_path))
+            barrier = threading.Barrier(len(updates))
+            errors = []
+
+            def apply_update(field, value):
+                try:
+                    barrier.wait(timeout=10)
+                    store.update({field: value}, running=False)
+                except Exception as exc:  # noqa: BLE001 - collected for assertion
+                    errors.append((field, exc))
+
+            threads = [
+                threading.Thread(target=apply_update, args=(field, value))
+                for field, value in updates.items()
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=30)
+
+            self.assertEqual([], errors)
+            saved = json.loads(config_path.read_text(encoding="utf-8"))
+            for field, value in updates.items():
+                self.assertEqual(value, saved[field], f"lost concurrent update for {field}")
+
     def test_relative_log_file_is_canonicalized_under_config_directory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "nested" / "config.json"
