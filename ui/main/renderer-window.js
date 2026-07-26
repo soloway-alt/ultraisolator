@@ -123,8 +123,69 @@ function createRendererResolver({ isPackaged, distIndexPath, devRendererUrl, get
   return { rendererUrl, invalidate, isTrustedRendererUrl };
 }
 
+// Owns the "what is currently displayed in the main window" state so a single
+// place decides when the window must be (re)loaded. The previous boolean latch
+// was set once and never reset, so after a tray Retry or a renderer crash the
+// window stayed stuck on the diagnostic/failure page even though the app had
+// recovered. States:
+//   'unloaded'   nothing loaded yet, or explicitly reset after a failure/retry
+//   'diagnostic' a startup-error or mount-failure page is showing (NOT the app)
+//   'mounted'    the real React dashboard is mounted and healthy
+// ensure() (re)loads whenever the state is not 'mounted', so the only way to
+// skip a reload is a genuinely healthy renderer. All Electron interactions are
+// injected as thunks so this is unit-testable without a BrowserWindow.
+function createRendererLoader({ resolveTarget, loadFile, loadURL, waitForMount, getBackendStartupError, failureUrl }) {
+  let state = 'unloaded';
+  let pending = null;
+
+  function getState() {
+    return state;
+  }
+
+  // Force the next ensure() to reload. Call this whenever the window content
+  // stops being the real renderer: a renderer-process crash, or a manual retry
+  // after a startup failure.
+  function reset() {
+    state = 'unloaded';
+    pending = null;
+  }
+
+  function ensure() {
+    if (state === 'mounted') {
+      return Promise.resolve();
+    }
+    if (pending) {
+      return pending;
+    }
+    const target = resolveTarget();
+    pending = (target.type === 'file' ? loadFile(target.target) : loadURL(target.target))
+      .then(async () => {
+        // A backend startup error means the diagnostic page is showing on
+        // purpose; do not probe for React and do not mark it mounted.
+        if (getBackendStartupError()) {
+          state = 'diagnostic';
+          return;
+        }
+        const mounted = await waitForMount();
+        if (!mounted) {
+          await loadURL(failureUrl('React did not mount from the packaged renderer build. Run npm --prefix ui run build:renderer and check ui/dist/index.html asset paths.'));
+          state = 'diagnostic';
+          return;
+        }
+        state = 'mounted';
+      })
+      .finally(() => {
+        pending = null;
+      });
+    return pending;
+  }
+
+  return { ensure, reset, getState };
+}
+
 module.exports = {
   createRendererResolver,
+  createRendererLoader,
   diagnosticPage,
   escapeHtml,
   rendererFailureUrl

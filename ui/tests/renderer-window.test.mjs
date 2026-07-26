@@ -3,7 +3,7 @@ import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import rendererWindow from '../main/renderer-window.js';
 
-const { createRendererResolver, escapeHtml, rendererFailureUrl } = rendererWindow;
+const { createRendererResolver, createRendererLoader, escapeHtml, rendererFailureUrl } = rendererWindow;
 
 // A file that certainly exists on disk: this test file itself.
 const EXISTING_FILE = fileURLToPath(import.meta.url);
@@ -99,6 +99,88 @@ test('the resolved target is cached until invalidate() is called', () => {
   const target = resolver.rendererUrl();
   assert.equal(target.type, 'url');
   assert.ok(decodeURIComponent(target.target).includes('backend integrity check failed'));
+});
+
+function makeLoader(overrides = {}) {
+  const calls = { loadFile: [], loadURL: [] };
+  let startupError = null;
+  let mounts = true;
+  const loader = createRendererLoader({
+    // Mirror the production resolver: a startup error resolves to a diagnostic
+    // URL, otherwise the dist file target.
+    resolveTarget: overrides.resolveTarget
+      || (() => (startupError
+        ? { type: 'url', target: 'data:diagnostic' }
+        : { type: 'file', target: 'dist/index.html' })),
+    loadFile: (target) => {
+      calls.loadFile.push(target);
+      return Promise.resolve();
+    },
+    loadURL: (target) => {
+      calls.loadURL.push(target);
+      return Promise.resolve();
+    },
+    waitForMount: () => Promise.resolve(typeof mounts === 'function' ? mounts() : mounts),
+    getBackendStartupError: () => startupError,
+    failureUrl: (detail) => `failure:${detail}`,
+    ...overrides
+  });
+  return {
+    loader,
+    calls,
+    setStartupError: (value) => { startupError = value; },
+    setMounts: (value) => { mounts = value; }
+  };
+}
+
+test('renderer loader mounts once and then skips reloading a healthy renderer', async () => {
+  const { loader, calls } = makeLoader();
+  await loader.ensure();
+  assert.equal(loader.getState(), 'mounted');
+  assert.equal(calls.loadFile.length, 1);
+  // A second ensure() on a healthy renderer must not reload.
+  await loader.ensure();
+  assert.equal(calls.loadFile.length, 1);
+});
+
+test('renderer loader reloads after a startup-failure diagnostic is cleared on retry', async () => {
+  const harness = makeLoader();
+  harness.setStartupError('backend integrity check failed');
+  await harness.loader.ensure();
+  // The diagnostic page is showing on purpose — NOT mounted.
+  assert.equal(harness.loader.getState(), 'diagnostic');
+  assert.equal(harness.calls.loadURL.length, 1);
+
+  // Backend recovered on retry: clear the error, reset, and ensure again.
+  harness.setStartupError(null);
+  harness.loader.reset();
+  assert.equal(harness.loader.getState(), 'unloaded');
+  await harness.loader.ensure();
+  // Regression: the old boolean latch left the diagnostic page up forever.
+  assert.equal(harness.loader.getState(), 'mounted');
+  assert.equal(harness.calls.loadFile.length, 1);
+});
+
+test('renderer loader reloads after a renderer-process crash reset', async () => {
+  const { loader, calls } = makeLoader();
+  await loader.ensure();
+  assert.equal(loader.getState(), 'mounted');
+
+  // Simulate render-process-gone: the handler loads a failure page then resets.
+  loader.reset();
+  assert.equal(loader.getState(), 'unloaded');
+  await loader.ensure();
+  assert.equal(loader.getState(), 'mounted');
+  assert.equal(calls.loadFile.length, 2);
+});
+
+test('renderer loader shows the failure page when React never mounts', async () => {
+  const harness = makeLoader();
+  harness.setMounts(false);
+  await harness.loader.ensure();
+  assert.equal(harness.loader.getState(), 'diagnostic');
+  assert.equal(harness.calls.loadURL.length, 1);
+  assert.match(harness.calls.loadURL[0], /^failure:/);
 });
 
 test('rendererFailureUrl escapes the detail and falls back to a default message', () => {

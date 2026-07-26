@@ -46,8 +46,7 @@ let backendProcess = null;
 let backendUrl = null;
 let isQuitting = false;
 let lastStatus = { running: false, game_mode: false };
-let rendererLoaded = false;
-let rendererLoadPromise = null;
+// Renderer load state is owned by rendererLoader (ui/main/renderer-window.js).
 let trayStatusTimer = null;
 let backendLogStream = null;
 let backendStartupError = null;
@@ -65,7 +64,7 @@ const LIVE_RECONNECT_DELAY_MS = 1500;
 const { isPlainObject, proxyError, resolveBackendOperation } = require('./main/backend-proxy');
 // Renderer URL resolution, trust checks, and diagnostic pages; the resolver
 // caches the target so per-IPC trust checks stop stat-ing the dist build.
-const { createRendererResolver, rendererFailureUrl } = require('./main/renderer-window');
+const { createRendererResolver, createRendererLoader, rendererFailureUrl } = require('./main/renderer-window');
 // SSE relay between the backend /api/live stream and the renderer;
 // reconnect and frame-parsing logic is Electron-free and unit-tested.
 const { createLiveStreamRelay } = require('./main/live-stream');
@@ -93,6 +92,18 @@ const rendererResolver = createRendererResolver({
   distIndexPath: path.join(__dirname, 'dist', 'index.html'),
   devRendererUrl: !app.isPackaged && process.env.EII_RENDERER_URL ? process.env.EII_RENDERER_URL : null,
   getBackendStartupError: () => backendStartupError
+});
+// Owns "what is showing in the window" so Retry / renderer-crash recovery can
+// force a reload instead of being stuck behind a one-way boolean latch. The
+// Electron interactions are late-bound thunks because mainWindow is created
+// after this module loads.
+const rendererLoader = createRendererLoader({
+  resolveTarget: () => rendererResolver.rendererUrl(),
+  loadFile: (target) => mainWindow.loadFile(target, { hash: 'dashboard' }),
+  loadURL: (target) => mainWindow.loadURL(target),
+  waitForMount: () => waitForRendererMount(),
+  getBackendStartupError: () => backendStartupError,
+  failureUrl: rendererFailureUrl
 });
 
 function appSettingsPath() {
@@ -439,31 +450,10 @@ function waitForRendererMount(timeoutMs = 5000) {
 }
 
 function ensureRendererLoaded() {
-  if (!mainWindow || rendererLoaded) {
+  if (!mainWindow) {
     return Promise.resolve();
   }
-  if (rendererLoadPromise) {
-    return rendererLoadPromise;
-  }
-  const target = rendererResolver.rendererUrl();
-  rendererLoadPromise = (target.type === 'file'
-    ? mainWindow.loadFile(target.target, { hash: 'dashboard' })
-    : mainWindow.loadURL(target.target))
-    .then(async () => {
-      if (backendStartupError) {
-        rendererLoaded = true;
-        return;
-      }
-      const mounted = await waitForRendererMount();
-      if (!mounted) {
-        await mainWindow.loadURL(rendererFailureUrl('React did not mount from the packaged renderer build. Run npm --prefix ui run build:renderer and check ui/dist/index.html asset paths.'));
-      }
-      rendererLoaded = true;
-    })
-    .finally(() => {
-      rendererLoadPromise = null;
-    });
-  return rendererLoadPromise;
+  return rendererLoader.ensure();
 }
 
 async function refreshStatusOnce() {
@@ -635,6 +625,10 @@ function createWindow() {
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     stopLiveStream({ notify: false });
+    // The renderer is dead; drop the loader out of 'mounted' so the next
+    // showMainWindow reloads the real dashboard instead of trusting a stale
+    // mounted state.
+    rendererLoader.reset();
     if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.loadURL(rendererFailureUrl(`Renderer process exited: ${details.reason || 'unknown reason'}.`)).catch(() => {});
     }
@@ -793,6 +787,9 @@ function setTrayErrorMenu() {
 function retryBootstrap() {
   // Reset restart budget for a manual retry and re-run bootstrap.
   backendRestartCount = 0;
+  // Force the window to reload once the backend recovers: without this the
+  // loader would stay on the diagnostic page it is currently showing.
+  rendererLoader.reset();
   killBackendProcess();
   bootstrap().catch(handleBootstrapFailure);
 }

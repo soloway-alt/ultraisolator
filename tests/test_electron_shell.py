@@ -39,13 +39,16 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("show: false", main)
         self.assertIn("event.preventDefault()", main)
         self.assertIn("mainWindow.hide()", main)
-        self.assertIn("rendererLoaded", main)
+        # Renderer load state is owned by the injectable rendererLoader
+        # (createRendererLoader) so Retry / renderer-crash can force a reload;
+        # the fail-then-retry transition is covered by ui/tests/renderer-window.test.mjs.
+        self.assertIn("rendererLoader", main)
         self.assertIn("ensureRendererLoaded", main)
         self.assertIn("await ensureRendererLoaded()", main)
         self.assertIn("Menu.setApplicationMenu(null)", main)
         self.assertIn("mainWindow.removeMenu()", main)
         # The packaged app must open on Dashboard, not a restored stale hash.
-        self.assertIn("loadFile(target.target, { hash: 'dashboard' })", main)
+        self.assertIn("loadFile(target, { hash: 'dashboard' })", main)
         self.assertIn("new Tray", main)
         self.assertIn("Open Dashboard", tray_module)
         self.assertIn("Start Isolator", tray_module)
