@@ -38,6 +38,23 @@ class ProtectedStateError(ValueError):
     """Raised when protected recovery state cannot be trusted."""
 
 
+# Paths whose ACL was applied and verified this session. The ACL layer shells
+# out to powershell/icacls/whoami, so re-verifying the same recovery directory
+# and files on every operation would put multiple process spawns on hot paths
+# (jail-state records are written from the monitor thread). Once the parent
+# directory is locked to SYSTEM/Administrators with inheritance, files created
+# inside it inherit that ACL, so a per-file verification only needs to happen
+# once per session; changing the ACL afterwards would already require
+# administrator rights.
+_verified_protected_parents = set()
+_verified_protected_files = set()
+
+
+def reset_protected_state_cache_for_tests():
+    _verified_protected_parents.clear()
+    _verified_protected_files.clear()
+
+
 def default_protected_state_dir():
     root = os.environ.get("ProgramData")
     if not root:
@@ -191,18 +208,26 @@ def apply_protected_state_acl(path):
 
 def ensure_protected_state_parent(path):
     directory = os.path.dirname(os.path.abspath(path))
+    if directory in _verified_protected_parents and os.path.isdir(directory):
+        return directory
     os.makedirs(directory, exist_ok=True)
     if not apply_protected_state_acl(directory):
         raise ProtectedStateError("recovery state ACL could not be protected")
+    _verified_protected_parents.add(directory)
     return directory
 
 
 def is_protected_state_path_safe(path):
-    targets = [os.path.dirname(os.path.abspath(path))]
-    if os.path.exists(path):
-        targets.append(os.path.abspath(path))
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent in _verified_protected_parents and os.path.isdir(parent):
+        targets = []
+    else:
+        targets = [parent]
+    absolute = os.path.abspath(path)
+    if os.path.exists(path) and absolute not in _verified_protected_files:
+        targets.append(absolute)
     key_path = state_key_path(path)
-    if os.path.exists(key_path):
+    if os.path.exists(key_path) and key_path not in _verified_protected_files:
         targets.append(key_path)
 
     if os.name != "nt":
@@ -229,15 +254,22 @@ def is_protected_state_path_safe(path):
 
 def _write_bytes_atomic(path, data):
     ensure_protected_state_parent(path)
-    fd, tmp = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=os.path.dirname(os.path.abspath(path)))
+    absolute = os.path.abspath(path)
+    fd, tmp = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=os.path.dirname(absolute))
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, path)
-        if not apply_protected_state_acl(path) or not is_protected_state_path_safe(path):
-            raise ProtectedStateError("recovery state ACL could not be protected")
+        # First write per file per session: apply and verify the file ACL.
+        # Later writes inherit the locked directory ACL through the mkstemp
+        # temp file, so re-running the subprocess-backed verification would
+        # only add process-spawn latency on the monitor thread.
+        if absolute not in _verified_protected_files:
+            if not apply_protected_state_acl(path) or not is_protected_state_path_safe(path):
+                raise ProtectedStateError("recovery state ACL could not be protected")
+            _verified_protected_files.add(absolute)
     except Exception:
         try:
             os.remove(tmp)

@@ -212,12 +212,44 @@ class RecoveryMixin:
         finally:
             self._release_single_instance()
 
+    def _discard_legacy_jail_state(self, legacy_path=None):
+        # WHY: The pre-hardening jail_state.json lived unauthenticated in the
+        # writable install/repo root. Its contents are untrusted by definition,
+        # so never read or migrate it — just remove the stale file.
+        if legacy_path is None:
+            legacy_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jail_state.json")
+        if not os.path.exists(legacy_path):
+            return
+        try:
+            os.remove(legacy_path)
+            self._log_once(
+                ("jail_state_legacy_discarded",),
+                "[WARN] Discarded legacy unauthenticated jail_state.json from the install directory.",
+            )
+        except OSError as exc:
+            self._log_once(
+                ("jail_state_legacy_remove", type(exc).__name__),
+                f"[WARN] Failed to remove legacy jail state file: {exc}",
+            )
+
     def _load_jail_state(self):
         try:
             if not os.path.exists(JAIL_STATE_PATH):
                 return {}
-            with open(JAIL_STATE_PATH, "r", encoding="utf-8") as handle:
-                loaded = json.load(handle)
+            if not is_protected_state_path_safe(JAIL_STATE_PATH):
+                self._log_once(
+                    ("jail_state_acl_unsafe",),
+                    "[WARN] Jail state rejected: ACL is unsafe, so path validation was not attempted.",
+                )
+                return None
+            try:
+                loaded = read_protected_state_file(JAIL_STATE_PATH)
+            except ProtectedStateError as exc:
+                self._log_once(
+                    ("jail_state_protected", str(exc)),
+                    f"[WARN] Jail state rejected: tampered or path validation failed ({exc}).",
+                )
+                return None
             if isinstance(loaded, dict):
                 pids = loaded.get("pids")
                 if isinstance(pids, dict):
@@ -232,29 +264,17 @@ class RecoveryMixin:
             return None
 
     def _save_jail_state(self, state):
-        tmp = JAIL_STATE_PATH + ".tmp"
         try:
             state["version"] = JAIL_STATE_VERSION
             state["updated_at"] = time.time()
-            with open(tmp, "w", encoding="utf-8") as handle:
-                json.dump(state, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(tmp, JAIL_STATE_PATH)
-            return True
+            return bool(write_protected_state_file(JAIL_STATE_PATH, state))
         except Exception as exc:
             self._log_once(("jail_state_save", type(exc).__name__), f"[WARN] Failed to save jail state: {exc}")
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
             return False
 
     def _remove_jail_state_file(self):
         try:
-            os.remove(JAIL_STATE_PATH)
-        except FileNotFoundError:
-            pass
+            remove_protected_state_file(JAIL_STATE_PATH)
         except OSError as exc:
             self._log_once(("jail_state_remove", type(exc).__name__), f"[WARN] Failed to remove jail state: {exc}")
 
@@ -309,23 +329,93 @@ class RecoveryMixin:
         self._save_jail_state(state)
 
     def _remove_jail_state(self, pid):
-        pid = int(pid)
+        self._remove_jail_states([pid])
+
+    def _remove_jail_states(self, pids):
+        # Symmetric with _record_jail_states: one load-modify-save for the
+        # whole batch instead of a read+fsync-rewrite cycle per PID (the bulk
+        # restore path runs inside the ~5s Windows shutdown budget).
+        normalized_pids = []
+        for pid in pids:
+            try:
+                normalized_pids.append(int(pid))
+            except (TypeError, ValueError):
+                continue
+        if not normalized_pids:
+            return
         state = self._load_jail_state()
         if not isinstance(state, dict):
             return
-        pids = state.get("pids")
-        if not isinstance(pids, dict):
+        pids_map = state.get("pids")
+        if not isinstance(pids_map, dict):
             return
-        if str(pid) not in pids:
+        removed_any = False
+        for pid in normalized_pids:
+            if str(pid) in pids_map:
+                pids_map.pop(str(pid), None)
+                removed_any = True
+        if not removed_any:
             return
-        pids.pop(str(pid), None)
-        if not pids:
+        if not pids_map:
             self._remove_jail_state_file()
         else:
             self._save_jail_state(state)
 
+    _RESTORABLE_PRIORITY_CLASSES = frozenset({
+        IDLE_PRIORITY_CLASS,
+        BELOW_NORMAL_PRIORITY_CLASS,
+        NORMAL_PRIORITY_CLASS,
+        ABOVE_NORMAL_PRIORITY_CLASS,
+        HIGH_PRIORITY_CLASS,
+    })
+
+    def _sanitize_jail_entry_state(self, state):
+        """Validate a persisted jail-state dict before it reaches _restore_process.
+
+        Returns a cleaned copy containing only known fields with in-range
+        values, or None when any present field is malformed. The file is
+        HMAC-signed, but restore feeds these values into privileged process
+        mutations, so defense-in-depth field validation stays cheap insurance.
+        """
+        if not isinstance(state, dict):
+            return None
+        cleaned = {}
+        for key, value in state.items():
+            if key == "priority_class":
+                if value not in self._RESTORABLE_PRIORITY_CLASSES:
+                    return None
+            elif key in ("affinity_mask", "power_control_mask", "power_state_mask"):
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value >= (1 << 64):
+                    return None
+            elif key == "cpu_set_ids":
+                if not isinstance(value, list):
+                    return None
+                ids = []
+                for cpu_set_id in value:
+                    if not isinstance(cpu_set_id, int) or isinstance(cpu_set_id, bool) or cpu_set_id < 0:
+                        return None
+                    ids.append(cpu_set_id)
+                known = getattr(self, "_cpu_sets_by_id", None)
+                if known and any(cpu_set_id not in known for cpu_set_id in ids):
+                    return None
+                value = ids
+            elif key == "page_priority":
+                if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 7:
+                    return None
+            elif key == "io_priority":
+                if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 3:
+                    return None
+            elif key == "priority_boost_disabled":
+                value = bool(value)
+            else:
+                # Unknown keys are dropped rather than fed to restore.
+                continue
+            cleaned[key] = value
+        return cleaned
+
     def _recover_jail_state_from_crash(self, auto=False):
         prefix = "[RECOVERY:jail:auto]" if auto else "[RECOVERY:jail]"
+        self._discard_legacy_jail_state()
         if not os.path.exists(JAIL_STATE_PATH):
             return True
         state = self._load_jail_state()
@@ -394,19 +484,31 @@ class RecoveryMixin:
                         f"{prefix} Skipping pid={pid}; create_time mismatch indicates PID reuse.",
                     )
                     continue
+                sanitized_state = self._sanitize_jail_entry_state(saved_entry.get("state", {}))
+                if sanitized_state is None:
+                    pids.pop(pid_str, None)
+                    dirty = True
+                    self._log_once(
+                        ("jail_recovery_invalid_state", pid),
+                        f"{prefix} Skipping pid={pid}; persisted restore values are malformed.",
+                    )
+                    continue
                 with self._state_lock:
                     self._entry_gen += 1
                     self._touched[pid] = {
                         "name": saved_entry.get("name", ""),
                         "create_time": saved_create_time or current_create_time,
-                        "state": dict(saved_entry.get("state", {})),
+                        "state": sanitized_state,
                         "threads": {},
                         "source": "jail",
                         "gen": self._entry_gen,
                     }
             finally:
                 kernel32.CloseHandle(handle)
-            if self._restore_process(pid):
+            # The loop already pops restored entries from `state` and persists
+            # once at the end, so route _restore_process's per-PID removal into
+            # a throwaway collector instead of a redundant file rewrite.
+            if self._restore_process(pid, deferred_jail_removals=[]):
                 restored += 1
                 pids.pop(pid_str, None)
                 dirty = True

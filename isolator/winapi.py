@@ -60,7 +60,12 @@ RECOVERY_STATE_DIR = default_protected_state_dir()
 IFEO_BACKUP_PATH = os.path.join(RECOVERY_STATE_DIR, "ifeo_backup.json")
 RECOVERY_STATE_PATH = os.path.join(RECOVERY_STATE_DIR, "recovery_state.json")
 RECOVERY_STATE_VERSION = 2
-JAIL_STATE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jail_state.json")
+# WHY: The jail crash-recovery record is consumed by an elevated process and
+# feeds priority/affinity/EcoQoS values into _restore_process, so it must get
+# the same protection as the IFEO and power recovery artifacts: the ACL-locked
+# ProgramData recovery directory plus the HMAC envelope (see recovery.py). It
+# previously lived unauthenticated in the writable install/repo root.
+JAIL_STATE_PATH = os.path.join(RECOVERY_STATE_DIR, "jail_state.json")
 JAIL_STATE_VERSION = 1
 # WHY (item 10): This TTL is a CRASH-RECOVERY BACKSTOP only — it bounds how
 # long a stale on-disk jail record (left by a hard crash) is trusted before we

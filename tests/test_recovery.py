@@ -117,8 +117,10 @@ class RecoveryStateTests(unittest.TestCase):
 
         self.assertFalse(_is_under(repo_root, winapi.IFEO_BACKUP_PATH))
         self.assertFalse(_is_under(repo_root, winapi.RECOVERY_STATE_PATH))
+        self.assertFalse(_is_under(repo_root, winapi.JAIL_STATE_PATH))
         self.assertIn("EsportsIsolatorPRO", winapi.IFEO_BACKUP_PATH)
         self.assertIn("EsportsIsolatorPRO", winapi.RECOVERY_STATE_PATH)
+        self.assertIn("EsportsIsolatorPRO", winapi.JAIL_STATE_PATH)
 
     def _ifeo_snapshot(self, exe_name="cs2.exe"):
         base_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options"
@@ -530,30 +532,31 @@ class RecoveryStateTests(unittest.TestCase):
             messages = []
             isolator._log_once = lambda key, message: messages.append(message)
 
-            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path):
+            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path), patch(
+                "isolator.recovery.is_protected_state_path_safe", return_value=True
+            ):
                 self.assertFalse(isolator._recover_jail_state_from_crash(auto=True))
 
             self.assertTrue(os.path.exists(jail_path))
-            self.assertIn("Failed to load jail state", " ".join(messages))
+            self.assertIn("Jail state rejected", " ".join(messages))
 
     def test_crash_jail_recovery_skips_when_current_create_time_unknown(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             jail_path = os.path.join(tmpdir, "jail_state.json")
-            with open(jail_path, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "pids": {
-                            "4242": {
-                                "name": "svchost.exe",
-                                "create_time": 123,
-                                "source": "jail",
-                                "state": {"priority_class": 64},
-                                "updated_at": time.time(),
-                            }
+            _write_test_protected_state_file(
+                jail_path,
+                {
+                    "pids": {
+                        "4242": {
+                            "name": "svchost.exe",
+                            "create_time": 123,
+                            "source": "jail",
+                            "state": {"priority_class": 64},
+                            "updated_at": time.time(),
                         }
-                    },
-                    handle,
-                )
+                    }
+                },
+            )
 
             isolator = EsportsIsolatorPro(
                 config_path="__no_local_config__.json",
@@ -565,9 +568,11 @@ class RecoveryStateTests(unittest.TestCase):
             isolator._log_once = lambda key, message: messages.append(message)
             isolator._open_process = lambda *args, **kwargs: 99
             isolator._get_process_create_time = lambda handle: 0
-            isolator._restore_process = lambda pid: restored.append(pid) or True
+            isolator._restore_process = lambda pid, **kwargs: restored.append(pid) or True
 
-            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path):
+            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path), patch(
+                "isolator.recovery.is_protected_state_path_safe", return_value=True
+            ):
                 with patch("isolator.recovery.kernel32.CloseHandle"):
                     self.assertTrue(isolator._recover_jail_state_from_crash(auto=False))
 
@@ -578,21 +583,20 @@ class RecoveryStateTests(unittest.TestCase):
     def test_crash_jail_recovery_fails_closed_when_fresh_entry_cannot_open(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             jail_path = os.path.join(tmpdir, "jail_state.json")
-            with open(jail_path, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "pids": {
-                            "4242": {
-                                "name": "discord.exe",
-                                "create_time": 123,
-                                "source": "jail",
-                                "state": {"priority_class": 64},
-                                "updated_at": time.time(),
-                            }
+            _write_test_protected_state_file(
+                jail_path,
+                {
+                    "pids": {
+                        "4242": {
+                            "name": "discord.exe",
+                            "create_time": 123,
+                            "source": "jail",
+                            "state": {"priority_class": 64},
+                            "updated_at": time.time(),
                         }
-                    },
-                    handle,
-                )
+                    }
+                },
+            )
 
             isolator = EsportsIsolatorPro(
                 config_path="__no_local_config__.json",
@@ -603,7 +607,9 @@ class RecoveryStateTests(unittest.TestCase):
             isolator._log_once = lambda key, message: messages.append(message)
             isolator._open_process = MagicMock(return_value=None)
 
-            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path):
+            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path), patch(
+                "isolator.recovery.is_protected_state_path_safe", return_value=True
+            ):
                 self.assertFalse(isolator._recover_jail_state_from_crash(auto=True))
 
             self.assertTrue(os.path.exists(jail_path))
@@ -612,21 +618,20 @@ class RecoveryStateTests(unittest.TestCase):
     def test_crash_jail_recovery_prunes_stale_entries_without_opening_process(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             jail_path = os.path.join(tmpdir, "jail_state.json")
-            with open(jail_path, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "pids": {
-                            "4242": {
-                                "name": "discord.exe",
-                                "create_time": 123,
-                                "source": "jail",
-                                "state": {},
-                                "updated_at": time.time() - (25 * 60 * 60),
-                            }
+            _write_test_protected_state_file(
+                jail_path,
+                {
+                    "pids": {
+                        "4242": {
+                            "name": "discord.exe",
+                            "create_time": 123,
+                            "source": "jail",
+                            "state": {},
+                            "updated_at": time.time() - (25 * 60 * 60),
                         }
-                    },
-                    handle,
-                )
+                    }
+                },
+            )
 
             isolator = EsportsIsolatorPro(
                 config_path="__no_local_config__.json",
@@ -637,12 +642,140 @@ class RecoveryStateTests(unittest.TestCase):
             isolator._log_once = lambda key, message: messages.append(message)
             isolator._open_process = MagicMock(return_value=99)
 
-            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path):
+            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path), patch(
+                "isolator.recovery.is_protected_state_path_safe", return_value=True
+            ):
                 self.assertTrue(isolator._recover_jail_state_from_crash(auto=False))
 
             isolator._open_process.assert_not_called()
             self.assertIn("stale", " ".join(messages).lower())
             self.assertFalse(os.path.exists(jail_path))
+
+
+class JailStateProtectionTests(unittest.TestCase):
+    def _load_with_path(self, path, acl_safe=True):
+        recovery = DummyRecovery()
+        with patch("isolator.recovery.JAIL_STATE_PATH", path), patch(
+            "isolator.recovery.is_protected_state_path_safe", return_value=acl_safe
+        ):
+            return recovery, recovery._load_jail_state()
+
+    def test_load_jail_state_accepts_signed_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "jail_state.json")
+            _write_test_protected_state_file(path, {"pids": {"4242": {"name": "discord.exe"}}})
+
+            _recovery, loaded = self._load_with_path(path)
+
+        self.assertIsInstance(loaded, dict)
+        self.assertIn("4242", loaded["pids"])
+
+    def test_load_jail_state_rejects_unsigned_plain_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "jail_state.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"pids": {"4242": {"state": {"priority_class": 64}}}}, handle)
+
+            recovery, loaded = self._load_with_path(path)
+
+        self.assertIsNone(loaded)
+        self.assertIn("rejected", " ".join(recovery.messages).lower())
+
+    def test_load_jail_state_rejects_tampered_signed_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "jail_state.json")
+            _write_test_protected_state_file(path, {"pids": {"4242": {"name": "discord.exe"}}})
+            with open(path, "r", encoding="utf-8") as handle:
+                envelope = json.load(handle)
+            envelope["payload"]["pids"]["4242"]["name"] = "lsass.exe"
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(envelope, handle)
+
+            recovery, loaded = self._load_with_path(path)
+
+        self.assertIsNone(loaded)
+        self.assertIn("tampered", " ".join(recovery.messages).lower())
+
+    def test_load_jail_state_rejects_unsafe_acl_without_reading(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "jail_state.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("{}")
+
+            recovery, loaded = self._load_with_path(path, acl_safe=False)
+
+        self.assertIsNone(loaded)
+        self.assertIn("acl", " ".join(recovery.messages).lower())
+
+    def test_discard_legacy_jail_state_removes_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            legacy = os.path.join(tmpdir, "jail_state.json")
+            with open(legacy, "w", encoding="utf-8") as handle:
+                handle.write('{"pids": {}}')
+            recovery = DummyRecovery()
+
+            recovery._discard_legacy_jail_state(legacy_path=legacy)
+
+            self.assertFalse(os.path.exists(legacy))
+        self.assertIn("legacy", " ".join(recovery.messages).lower())
+
+
+class JailStateSanitizerTests(unittest.TestCase):
+    def _sanitize(self, state, cpu_sets_by_id=None):
+        recovery = DummyRecovery()
+        if cpu_sets_by_id is not None:
+            recovery._cpu_sets_by_id = cpu_sets_by_id
+        return recovery._sanitize_jail_entry_state(state)
+
+    def test_valid_state_round_trips_and_drops_unknown_keys(self):
+        state = {
+            "priority_class": 0x00000020,
+            "affinity_mask": 0b1111,
+            "cpu_set_ids": [256, 257],
+            "page_priority": 5,
+            "io_priority": 2,
+            "priority_boost_disabled": False,
+            "power_control_mask": 1,
+            "power_state_mask": 0,
+            "unexpected_key": "dropped",
+        }
+
+        cleaned = self._sanitize(state, cpu_sets_by_id={256: {}, 257: {}})
+
+        self.assertEqual(0x00000020, cleaned["priority_class"])
+        self.assertEqual([256, 257], cleaned["cpu_set_ids"])
+        self.assertNotIn("unexpected_key", cleaned)
+
+    def test_malformed_fields_reject_the_entry(self):
+        cases = [
+            {"priority_class": 0x00000100},
+            {"priority_class": "high"},
+            {"affinity_mask": -1},
+            {"affinity_mask": 1 << 64},
+            {"affinity_mask": "0xff"},
+            {"cpu_set_ids": "not-a-list"},
+            {"cpu_set_ids": [256, "257"]},
+            {"page_priority": 0},
+            {"page_priority": 8},
+            {"io_priority": 4},
+            {"power_control_mask": -5},
+        ]
+        for state in cases:
+            with self.subTest(state=state):
+                self.assertIsNone(self._sanitize(state))
+
+    def test_cpu_set_ids_must_exist_in_known_topology_when_available(self):
+        self.assertIsNone(
+            self._sanitize({"cpu_set_ids": [999]}, cpu_sets_by_id={256: {}})
+        )
+        self.assertEqual(
+            {"cpu_set_ids": [999]},
+            self._sanitize({"cpu_set_ids": [999]}, cpu_sets_by_id={}),
+        )
+
+    def test_non_dict_state_is_rejected(self):
+        self.assertIsNone(self._sanitize(None))
+        self.assertIsNone(self._sanitize([]))
 
 
 if __name__ == "__main__":

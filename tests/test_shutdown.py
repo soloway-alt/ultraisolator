@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import tempfile
@@ -7,7 +8,25 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from isolator.app import EsportsIsolatorPro
-from isolator.winapi import JAIL_STATE_PATH
+
+
+@contextlib.contextmanager
+def _temp_jail_state_path():
+    """Point jail-state I/O at a tempdir with the ACL layer stubbed out.
+
+    Keeps the suite away from the machine's real recovery state and from the
+    powershell/icacls subprocess chain behind the protected-state helpers.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "jail_state.json")
+        with patch("isolator.recovery.JAIL_STATE_PATH", path), patch(
+            "isolator.recovery.is_protected_state_path_safe", return_value=True
+        ), patch(
+            "isolator.protected_state.apply_protected_state_acl", return_value=True
+        ), patch(
+            "isolator.protected_state.is_protected_state_path_safe", return_value=True
+        ):
+            yield path
 
 
 class ShutdownFlowTests(unittest.TestCase):
@@ -109,17 +128,21 @@ class ShutdownFlowTests(unittest.TestCase):
             isolator._touched[101] = {"gen": 1, "source": "jail"}
             isolator._touched[102] = {"gen": 1, "source": "jail"}
 
-        def restore_process(pid):
+        def restore_process(pid, deferred_jail_removals=None):
             with isolator._state_lock:
                 isolator._touched.pop(pid, None)
+            if pid == 101 and deferred_jail_removals is not None:
+                deferred_jail_removals.append(pid)
             return pid == 101
 
         isolator._restore_process = restore_process
         isolator._remove_jail_state_file = MagicMock()
+        isolator._remove_jail_states = MagicMock()
 
         isolator._restore_all_processes()
 
         isolator._remove_jail_state_file.assert_not_called()
+        isolator._remove_jail_states.assert_called_once_with([101])
 
     def test_restore_all_removes_jail_state_file_when_every_restore_succeeds(self):
         isolator = self._make_isolator()
@@ -127,24 +150,28 @@ class ShutdownFlowTests(unittest.TestCase):
             isolator._touched[101] = {"gen": 1, "source": "jail"}
             isolator._touched[102] = {"gen": 1, "source": "jail"}
 
-        def restore_process(pid):
+        def restore_process(pid, deferred_jail_removals=None):
             with isolator._state_lock:
                 isolator._touched.pop(pid, None)
+            if deferred_jail_removals is not None:
+                deferred_jail_removals.append(pid)
             return True
 
         isolator._restore_process = restore_process
         isolator._remove_jail_state_file = MagicMock()
+        isolator._remove_jail_states = MagicMock()
 
         isolator._restore_all_processes()
 
         isolator._remove_jail_state_file.assert_called_once()
+        isolator._remove_jail_states.assert_not_called()
 
     def test_restore_all_exception_pop_respects_generation_guard(self):
         isolator = self._make_isolator()
         with isolator._state_lock:
             isolator._touched[4242] = {"gen": 1, "source": "jail"}
 
-        def restore_process(pid):
+        def restore_process(pid, deferred_jail_removals=None):
             with isolator._state_lock:
                 isolator._touched[pid] = {"gen": 2, "source": "jail"}
             raise RuntimeError("restore failed")
@@ -225,7 +252,7 @@ class JailStateRecoveryTests(unittest.TestCase):
             config_path="__no_local_config__.json",
             scan_game_libraries=False,
         )
-        try:
+        with _temp_jail_state_path():
             with isolator._state_lock:
                 isolator._touched[4242] = {
                     "name": "discord.exe",
@@ -241,9 +268,40 @@ class JailStateRecoveryTests(unittest.TestCase):
             isolator._remove_jail_state(4242)
             state = isolator._load_jail_state()
             self.assertNotIn("4242", (state or {}).get("pids", {}))
-        finally:
-            if os.path.exists(JAIL_STATE_PATH):
-                os.remove(JAIL_STATE_PATH)
+
+    def test_remove_jail_states_batches_json_io(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        load_calls = []
+        save_calls = []
+        isolator._load_jail_state = lambda: load_calls.append(True) or {
+            "pids": {"101": {}, "102": {}, "103": {}}
+        }
+        isolator._save_jail_state = lambda state: save_calls.append(state) or True
+        isolator._remove_jail_state_file = MagicMock()
+
+        isolator._remove_jail_states([101, 102])
+
+        self.assertEqual([True], load_calls)
+        self.assertEqual(1, len(save_calls))
+        self.assertEqual({"103"}, set(save_calls[0]["pids"]))
+        isolator._remove_jail_state_file.assert_not_called()
+
+    def test_remove_jail_states_deletes_file_when_last_entry_removed(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        isolator._load_jail_state = lambda: {"pids": {"101": {}}}
+        isolator._save_jail_state = MagicMock()
+        isolator._remove_jail_state_file = MagicMock()
+
+        isolator._remove_jail_states([101])
+
+        isolator._remove_jail_state_file.assert_called_once()
+        isolator._save_jail_state.assert_not_called()
 
     def test_record_jail_states_batches_json_io(self):
         isolator = EsportsIsolatorPro(
@@ -270,3 +328,7 @@ class JailStateRecoveryTests(unittest.TestCase):
         self.assertEqual([True], load_calls)
         self.assertEqual(1, len(save_calls))
         self.assertEqual({"101", "102", "103"}, set(save_calls[0]["pids"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

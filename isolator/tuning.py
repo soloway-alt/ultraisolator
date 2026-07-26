@@ -434,7 +434,7 @@ class TuningMixin:
             f"[WARN] {operation} failed for pid={pid} ({entry_name}): {self._last_error_text()}",
         )
 
-    def _restore_process(self, pid):
+    def _restore_process(self, pid, deferred_jail_removals=None):
         pid = int(pid)
         
         with self._state_lock:
@@ -583,7 +583,12 @@ class TuningMixin:
                         self._touched.pop(pid, None)
                         self._last_hot_thread_refresh.pop(pid, None)
             if remove_jail_state:
-                self._remove_jail_state(pid)
+                # Bulk callers pass a collector so N restores cost one batched
+                # file rewrite (_remove_jail_states) instead of N fsync cycles.
+                if deferred_jail_removals is not None:
+                    deferred_jail_removals.append(pid)
+                else:
+                    self._remove_jail_state(pid)
 
     def _restore_all_processes(self):
         with self._state_lock:
@@ -604,9 +609,10 @@ class TuningMixin:
                 (pid, entry.get("gen", 0))
                 for pid, entry in self._touched.items()
             ]
+        deferred_jail_removals = []
         for pid, entry_gen in entries:
             try:
-                if self._restore_process(pid):
+                if self._restore_process(pid, deferred_jail_removals=deferred_jail_removals):
                     restored_pids.add(pid)
                 else:
                     failed_pids.add(pid)
@@ -630,9 +636,12 @@ class TuningMixin:
         # _restore_process deliberately keeps the on-disk record for a failed
         # PID so the next elevated launch can retry; an unconditional delete
         # here would wipe that record (same bug class as the IFEO backup fix
-        # in _restore_ifeo_priorities).
+        # in _restore_ifeo_priorities). With failures present, drop only the
+        # successfully-restored PIDs in one batched rewrite.
         if not (failed_pids - restored_pids):
             self._remove_jail_state_file()
+        elif deferred_jail_removals:
+            self._remove_jail_states(deferred_jail_removals)
 
     def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0):
         if not self._begin_process_mutation():
