@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
+import { useBackendResource } from '../hooks/useBackendResource.js';
 import { useI18n } from '../i18n.jsx';
-import { requestJson } from '../utils/api.mjs';
+import { translatedNotice } from '../utils/config.mjs';
 
 const LOG_LIMIT = 500;
 const REFRESH_INTERVAL_MS = 5000;
@@ -54,59 +55,29 @@ export function LogsPage({ live }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
-  const [payload, setPayload] = useState(null);
+  const enabled = !gameMode && live.visible;
   const [lastLoaded, setLastLoaded] = useState(null);
   const [severityFilter, setSeverityFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [query, setQuery] = useState('');
-  const [logState, setLogState] = useState({
-    loading: true,
-    refreshing: false,
-    error: null
-  });
+  const logsResource = useBackendResource(`/api/logs?limit=${LOG_LIMIT}`, { enabled });
+  const payload = logsResource.data;
 
-  const loadLogs = useCallback(async (background = false) => {
-    if (gameMode || !live.visible) {
-      setLogState((current) => ({
-        ...current,
-        loading: false,
-        refreshing: false
-      }));
-      return;
-    }
-    setLogState((current) => ({
-      ...current,
-      loading: !background,
-      refreshing: Boolean(background),
-      error: null
-    }));
-    try {
-      const nextPayload = await requestJson(`/api/logs?limit=${LOG_LIMIT}`);
-      setPayload(nextPayload);
+  useEffect(() => {
+    if (payload) {
       setLastLoaded(new Date());
-      setLogState({ loading: false, refreshing: false, error: null });
-    } catch (error) {
-      setLogState({
-        loading: false,
-        refreshing: false,
-        error: error instanceof Error ? error.message : t('logs.reason.unavailable', 'Unable to load logs')
-      });
     }
-  }, [gameMode, live.visible, t]);
+  }, [payload]);
 
   useEffect(() => {
-    loadLogs(false);
-  }, [loadLogs]);
-
-  useEffect(() => {
-    if (gameMode || !live.visible) {
+    if (!enabled) {
       return undefined;
     }
     const timer = window.setInterval(() => {
-      loadLogs(true);
+      logsResource.reload();
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [gameMode, live.visible, loadLogs]);
+  }, [enabled, logsResource.reload]);
 
   const entries = Array.isArray(payload?.entries) ? payload.entries : [];
   const categories = useMemo(() => {
@@ -168,14 +139,14 @@ export function LogsPage({ live }) {
       <div className="settings-toolbar logs-toolbar">
         <div className="settings-path">{payload?.path || t('logs.pathFallback', 'log_file not configured')}</div>
         <div className="settings-actions">
-          <button type="button" onClick={() => loadLogs(false)} disabled={gameMode || logState.loading || logState.refreshing}>
-            {logState.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
+          <button type="button" onClick={logsResource.reload} disabled={gameMode || logsResource.loading || logsResource.refreshing}>
+            {logsResource.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
           </button>
         </div>
       </div>
 
       {gameMode ? <div className="settings-message">{t('logs.pausedMessage', 'Log refresh paused during game mode')}</div> : null}
-      {logState.error ? <div className="action-error">{logState.error}</div> : null}
+      {logsResource.error ? <div className="action-error">{translatedNotice(logsResource.error, t)}</div> : null}
 
       <div className="kpi-strip logs-summary-grid" aria-label="Log summary">
         <KpiCell label={t('logs.loadedLines', 'Loaded Lines')} value={counts.total} detail={reasonText(payload, t)} highlight />
@@ -254,7 +225,7 @@ export function LogsPage({ live }) {
               {!filteredEntries.length ? (
                 <tr>
                   <td className="process-empty" colSpan={5}>
-                    {logState.loading ? t('logs.loading', 'Loading logs') : t('logs.empty', 'No log entries match filters')}
+                    {logsResource.loading ? t('logs.loading', 'Loading logs') : t('logs.empty', 'No log entries match filters')}
                   </td>
                 </tr>
               ) : null}
