@@ -103,6 +103,42 @@ class ShutdownFlowTests(unittest.TestCase):
         isolator._restore_power_scheme.assert_called_once()
         isolator._restore_all_processes.assert_called_once()
 
+    def test_restore_all_keeps_jail_state_file_when_any_restore_fails(self):
+        isolator = self._make_isolator()
+        with isolator._state_lock:
+            isolator._touched[101] = {"gen": 1, "source": "jail"}
+            isolator._touched[102] = {"gen": 1, "source": "jail"}
+
+        def restore_process(pid):
+            with isolator._state_lock:
+                isolator._touched.pop(pid, None)
+            return pid == 101
+
+        isolator._restore_process = restore_process
+        isolator._remove_jail_state_file = MagicMock()
+
+        isolator._restore_all_processes()
+
+        isolator._remove_jail_state_file.assert_not_called()
+
+    def test_restore_all_removes_jail_state_file_when_every_restore_succeeds(self):
+        isolator = self._make_isolator()
+        with isolator._state_lock:
+            isolator._touched[101] = {"gen": 1, "source": "jail"}
+            isolator._touched[102] = {"gen": 1, "source": "jail"}
+
+        def restore_process(pid):
+            with isolator._state_lock:
+                isolator._touched.pop(pid, None)
+            return True
+
+        isolator._restore_process = restore_process
+        isolator._remove_jail_state_file = MagicMock()
+
+        isolator._restore_all_processes()
+
+        isolator._remove_jail_state_file.assert_called_once()
+
     def test_restore_all_exception_pop_respects_generation_guard(self):
         isolator = self._make_isolator()
         with isolator._state_lock:

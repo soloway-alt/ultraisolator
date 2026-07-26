@@ -626,7 +626,13 @@ class TuningMixin:
             self._log(f"[WARN] {remaining} entries remain in _touched (likely re-jailed by concurrent activity).")
         if total_tracked > 0:
             self._log(f"[RESTORE] Complete: {len(restored_pids)} restored, {len(failed_pids - restored_pids)} failed/skipped.")
-        self._remove_jail_state_file()
+        # WHY: Only delete the crash-recovery file when every restore succeeded.
+        # _restore_process deliberately keeps the on-disk record for a failed
+        # PID so the next elevated launch can retry; an unconditional delete
+        # here would wipe that record (same bug class as the IFEO backup fix
+        # in _restore_ifeo_priorities).
+        if not (failed_pids - restored_pids):
+            self._remove_jail_state_file()
 
     def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0):
         if not self._begin_process_mutation():
