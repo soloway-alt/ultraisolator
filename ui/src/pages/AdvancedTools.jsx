@@ -33,7 +33,7 @@ function deviceClassLabel(deviceClass, t) {
     : deviceClass;
 }
 
-export const AdvancedToolsPage = memo(function AdvancedToolsPage({ live }) {
+export const AdvancedToolsPage = memo(function AdvancedToolsPage({ live, page }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
@@ -56,7 +56,7 @@ export const AdvancedToolsPage = memo(function AdvancedToolsPage({ live }) {
 
   return (
     <section className="page advanced-tools-page" aria-labelledby="advanced-tools-title">
-      <PageHeading title="Advanced Tools" titleKey="nav.advanced" titleId="advanced-tools-title">
+      <PageHeading page={page} titleId="advanced-tools-title">
         <StatusTag status={status} />
         <Tag type={gameMode ? 'yellow' : payload?.available ? 'green' : 'gray'}>
           {gameMode ? t('advanced.paused', 'Paused in game mode') : t('advanced.readOnly', 'Read-only')}

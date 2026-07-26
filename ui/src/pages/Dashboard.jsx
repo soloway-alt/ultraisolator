@@ -33,7 +33,7 @@ function capabilityIssueText(issue, t) {
   );
 }
 
-export const DashboardPage = memo(function DashboardPage({ live }) {
+export const DashboardPage = memo(function DashboardPage({ live, page }) {
   const { t } = useI18n();
   const [actionState, setActionState] = useState({ pending: null, error: null, lastAction: null });
   const snapshot = live.snapshot;
@@ -179,7 +179,7 @@ export const DashboardPage = memo(function DashboardPage({ live }) {
 
   return (
     <section className="page dashboard-page" aria-labelledby="dashboard-title">
-      <PageHeading title="Dashboard" titleKey="nav.dashboard" titleId="dashboard-title">
+      <PageHeading page={page} titleId="dashboard-title">
         <StatusTag status={status} />
         <Tag type={live.connectionState === 'connected' ? 'green' : 'gray'}>
           {t(`connection.${live.connectionState}`, live.connectionState)}

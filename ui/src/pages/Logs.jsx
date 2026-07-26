@@ -52,7 +52,7 @@ function reasonText(payload, t) {
   return t('logs.reason.unavailable', 'Logs unavailable');
 }
 
-export const LogsPage = memo(function LogsPage({ live }) {
+export const LogsPage = memo(function LogsPage({ live, page }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
@@ -130,7 +130,7 @@ export const LogsPage = memo(function LogsPage({ live }) {
 
   return (
     <section className="page logs-page" aria-labelledby="logs-title">
-      <PageHeading title="Activity" titleKey="nav.logs" titleId="logs-title">
+      <PageHeading page={page} titleId="logs-title">
         <StatusTag status={status} />
         <Tag type={gameMode ? 'yellow' : payload?.available ? 'green' : 'gray'}>
           {gameMode ? t('logs.pausedTag', 'Paused in game mode') : payload?.available ? t('logs.fileLog', 'File log') : t('logs.noLogFile', 'No log file')}

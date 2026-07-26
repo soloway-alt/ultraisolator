@@ -18,7 +18,7 @@ function displayConfigPath(configPath) {
   return parts.at(-1) || 'config.json';
 }
 
-export const SettingsPage = memo(function SettingsPage({ live }) {
+export const SettingsPage = memo(function SettingsPage({ live, page }) {
   const { t } = useI18n();
   const { settings: appSettings, updateSettings } = useAppSettings();
   const status = live.snapshot?.status || {};
@@ -231,7 +231,7 @@ export const SettingsPage = memo(function SettingsPage({ live }) {
 
   return (
     <section className="page settings-page" aria-labelledby="settings-title">
-      <PageHeading title="Settings" titleKey="nav.settings" titleId="settings-title">
+      <PageHeading page={page} titleId="settings-title">
         <StatusTag status={status} />
         <Tag type={settingsState.restartRequired ? 'yellow' : 'gray'}>
           {settingsState.restartRequired ? t('settings.restartRequired', 'Restart to apply') : t('settings.configEditor', 'Advanced configuration')}

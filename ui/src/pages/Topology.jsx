@@ -24,7 +24,7 @@ const CORE_TYPE_FALLBACK_LABELS = {
   mixed: 'Mixed'
 };
 
-export const TopologyPage = memo(function TopologyPage({ live }) {
+export const TopologyPage = memo(function TopologyPage({ live, page }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const [selectedCoreId, setSelectedCoreId] = useState(null);
@@ -59,7 +59,7 @@ export const TopologyPage = memo(function TopologyPage({ live }) {
 
   return (
     <section className="page topology-page" aria-labelledby="topology-title">
-      <PageHeading title="CPU Topology" titleKey="nav.topology" titleId="topology-title">
+      <PageHeading page={page} titleId="topology-title">
         <StatusTag status={status} />
         <Tag type={topology?.available ? 'green' : 'gray'}>
           {topology?.available ? t('topology.available', 'Topology available') : t('topology.unavailable', 'Topology unavailable')}
