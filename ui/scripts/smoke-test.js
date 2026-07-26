@@ -168,9 +168,11 @@ async function main() {
   const electronMain = fs.readFileSync(path.join(UI_ROOT, 'electron-main.js'), 'utf8');
   const appSource = fs.readFileSync(path.join(UI_ROOT, 'src', 'App.jsx'), 'utf8');
   const settingsConstants = fs.readFileSync(path.join(UI_ROOT, 'src', 'constants', 'settings.mjs'), 'utf8');
-  assert(electronMain.includes('minimizeToTrayOnStart: false'), 'Electron must open the dashboard on startup by default.');
-  assert(settingsConstants.includes('minimizeToTrayOnStart: false'), 'Renderer app settings must default to opening the dashboard on startup.');
-  assert(settingsConstants.includes("language: 'en'"), 'Renderer app settings must include a persisted language preference.');
+  const appSettingsSchema = fs.readFileSync(path.join(UI_ROOT, 'shared', 'app-settings-schema.mjs'), 'utf8');
+  assert(appSettingsSchema.includes('minimizeToTrayOnStart: false'), 'App settings must default to opening the dashboard on startup.');
+  assert(appSettingsSchema.includes("language: 'en'"), 'App settings must include a persisted language preference.');
+  assert(electronMain.includes("require('./shared/app-settings-schema.mjs')"), 'Electron must read app-settings defaults from the shared schema.');
+  assert(settingsConstants.includes('app-settings-schema.mjs'), 'Renderer settings constants must re-export the shared app-settings schema.');
   assert(electronMain.includes('Menu.setApplicationMenu(null)'), 'Electron must remove the default File/Edit/View/Window menu.');
   assert(electronMain.includes('mainWindow.removeMenu()'), 'Electron BrowserWindow must remove the native menu bar.');
   assert(electronMain.includes("loadFile(target.target, { hash: 'dashboard' })"), 'Packaged app must open on Dashboard instead of restoring a stale hash page.');
