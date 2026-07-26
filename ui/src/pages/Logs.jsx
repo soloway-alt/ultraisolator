@@ -158,7 +158,7 @@ export function LogsPage({ live }) {
 
   return (
     <section className="page logs-page" aria-labelledby="logs-title">
-      <PageHeading title="Logs" titleId="logs-title">
+      <PageHeading title="Activity" titleKey="nav.logs" titleId="logs-title">
         <StatusTag status={status} />
         <Tag type={gameMode ? 'yellow' : payload?.available ? 'green' : 'gray'}>
           {gameMode ? t('logs.pausedTag', 'Paused in game mode') : payload?.available ? t('logs.fileLog', 'File log') : t('logs.noLogFile', 'No log file')}

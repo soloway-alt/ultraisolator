@@ -203,7 +203,6 @@ export function SettingsPage({ live }) {
     try {
       const configResult = await requestJson('/api/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config: validation.config })
       });
       setDraft(toEditableConfig(configResult.config, schema));

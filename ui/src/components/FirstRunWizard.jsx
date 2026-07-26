@@ -100,7 +100,6 @@ export function FirstRunWizard({ live }) {
       if (!configApplied) {
         await requestJson('/api/config', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ config: reviewConfig })
         });
         setConfigApplied(true);

@@ -84,7 +84,11 @@ function operationForRequest(path, options = {}) {
   }
   if (method === 'GET' && route === '/api/logs') {
     requireNoUnexpectedQuery(url, ['limit'], path);
-    return { op: 'logs.get', params: { limit: integerParam(url, 'limit', path) } };
+    const limit = integerParam(url, 'limit', path);
+    // Omit the key entirely when absent: `{limit: undefined}` survives the
+    // IPC structured clone as an own property and the main-process validator
+    // would reject it instead of applying the backend default.
+    return limit === undefined ? { op: 'logs.get' } : { op: 'logs.get', params: { limit } };
   }
   if (method === 'POST' && route === '/api/start') {
     requireNoUnexpectedQuery(url, [], path);
@@ -114,6 +118,14 @@ function raiseForPayload(payload, method, path, status) {
 
 export async function requestJson(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
+  // Fail fast and locally on unsupported options. `headers` in particular is
+  // treated as an attack signal by the main-process IPC validator, so a call
+  // site passing it must break here in development, not at the trust boundary.
+  for (const key of Object.keys(options)) {
+    if (key !== 'method' && key !== 'body') {
+      throw new Error(`Unsupported requestJson option: ${key}`);
+    }
+  }
   if (!window.isolator?.backendRequest) {
     throw new Error('Electron backend proxy is unavailable.');
   }

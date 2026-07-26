@@ -185,13 +185,12 @@ async function main() {
     '--port',
     String(port),
     '--config',
-    configPath,
-    '--api-token',
-    apiToken
+    configPath
   ], {
     cwd: PROJECT_ROOT,
     windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, EII_API_TOKEN: apiToken }
   });
 
   apiProcess.stderr.on('data', (chunk) => {

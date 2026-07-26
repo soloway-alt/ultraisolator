@@ -130,8 +130,15 @@ function readStoredAppSettings() {
   return { ...appSettingsState };
 }
 
-function readAppSettings() {
+// Reconcile the legacy login item and the scheduled-task startup state with
+// the persisted preference. isWindowsStartupTaskEnabled/setWindowsStartupTask
+// spawn schtasks.exe SYNCHRONOUSLY on the main thread, so this must run only
+// once at bootstrap and when a patch actually changes launchAtWindowsStartup —
+// never on every settings read (reads happen on renderer mount and every
+// language toggle).
+function syncStartupTaskState() {
   const settings = readStoredAppSettings();
+  const before = JSON.stringify(settings);
   let legacyEnabled = false;
   let legacyStateKnown = true;
   try {
@@ -156,7 +163,9 @@ function readAppSettings() {
     settings.launchAtWindowsStartup = false;
   }
   appSettingsState = normalizeAppSettings(settings);
-  persistAppSettings(appSettingsState);
+  if (JSON.stringify(appSettingsState) !== before) {
+    persistAppSettings(appSettingsState);
+  }
   return { ...appSettingsState };
 }
 
@@ -200,11 +209,12 @@ function validateAppSettingsPatch(patch) {
 
 function writeAppSettings(patch) {
   const validatedPatch = validateAppSettingsPatch(patch);
-  const current = readAppSettings();
+  const current = readStoredAppSettings();
   if (Object.keys(validatedPatch).length === 0) {
     return current;
   }
-  if (Object.prototype.hasOwnProperty.call(validatedPatch, 'launchAtWindowsStartup')) {
+  const touchesStartupTask = Object.prototype.hasOwnProperty.call(validatedPatch, 'launchAtWindowsStartup');
+  if (touchesStartupTask) {
     if (!disableLegacyLoginItem()) {
       throw new Error('Failed to remove the legacy Windows login item.');
     }
@@ -213,7 +223,10 @@ function writeAppSettings(patch) {
   const settings = normalizeAppSettings({
     ...current,
     ...validatedPatch,
-    launchAtWindowsStartup: isWindowsStartupTaskEnabled(),
+    // Only re-probe the scheduled task (a synchronous schtasks.exe spawn)
+    // when this patch actually touched it; a language or toast toggle must
+    // not pay for three process spawns.
+    launchAtWindowsStartup: touchesStartupTask ? isWindowsStartupTaskEnabled() : current.launchAtWindowsStartup,
     revision: current.revision + 1
   });
   persistAppSettings(settings);
@@ -404,7 +417,9 @@ function validateNoExtraRequestKeys(request) {
 }
 
 function appendBooleanParam(pathValue, params, name) {
-  if (!params || !(name in params)) {
+  // Treat an explicit-undefined value the same as an absent key; structured
+  // clone preserves `{name: undefined}` as an own property across IPC.
+  if (!params || params[name] === undefined) {
     return pathValue;
   }
   if (typeof params[name] !== 'boolean') {
@@ -414,7 +429,7 @@ function appendBooleanParam(pathValue, params, name) {
 }
 
 function appendIntegerParam(pathValue, params, name, min, max) {
-  if (!params || !(name in params)) {
+  if (!params || params[name] === undefined) {
     return pathValue;
   }
   const value = params[name];
@@ -552,7 +567,12 @@ function spawnBackendOnce(pythonCommand, args, root, backendStdio) {
     const child = spawn(pythonCommand, args, {
       cwd: root,
       windowsHide: true,
-      stdio: backendStdio
+      stdio: backendStdio,
+      // The bearer token authorizes start/stop/recover on an elevated
+      // engine; pass it through the environment instead of argv so it never
+      // shows up in the Windows process table (WMI CommandLine, EDR
+      // telemetry, crash dumps).
+      env: { ...process.env, EII_API_TOKEN: backendApiToken }
     });
 
     child.once('error', (err) => {
@@ -583,8 +603,7 @@ async function launchBackendProcess(port) {
     '-m', 'server',
     '--host', '127.0.0.1',
     '--port', String(port),
-    '--config', backendConfigPath(app, PROJECT_ROOT),
-    '--api-token', backendApiToken
+    '--config', backendConfigPath(app, PROJECT_ROOT)
   ];
   const backendStdio = app.isPackaged ? ['ignore', 'ignore', 'pipe'] : (
     process.env.EII_BACKEND_LOG_STDIO === '1' ? ['ignore', 'pipe', 'pipe'] : 'ignore'
@@ -1086,6 +1105,13 @@ function createWindow() {
   mainWindow.removeMenu();
   mainWindow.setMenuBarVisibility(false);
 
+  // The dashboard never needs media/geolocation/notification/etc. browser
+  // permissions; deny everything so a compromised renderer cannot request
+  // them either.
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -1207,7 +1233,9 @@ function requestGracefulQuit() {
 
 function getAppSettingsForRenderer(event) {
   assertTrustedIpcSender(event);
-  return readAppSettings();
+  // Pure cached read: the startup-task reconciliation ran at bootstrap and
+  // runs again only when a patch changes launchAtWindowsStartup.
+  return readStoredAppSettings();
 }
 
 function updateAppSettingsForRenderer(event, patch) {
@@ -1220,22 +1248,37 @@ function registerIpcHandlers() {
     return;
   }
   ipcHandlersRegistered = true;
-  ipcMain.handle('backend:request', proxyBackendRequest);
-  ipcMain.handle('live:start', startLiveStream);
-  ipcMain.handle('live:stop', stopLiveStreamForRenderer);
-  ipcMain.handle('window:minimize', () => {
+  // Every channel goes through the sender check so a new handler cannot be
+  // added without it. Handlers that already assert internally keep doing so;
+  // the double check is cheap and fails identically.
+  const guarded = (handler) => (event, ...args) => {
+    assertTrustedIpcSender(event);
+    return handler(event, ...args);
+  };
+  ipcMain.handle('backend:request', guarded(proxyBackendRequest));
+  ipcMain.handle('live:start', guarded(startLiveStream));
+  ipcMain.handle('live:stop', guarded(stopLiveStreamForRenderer));
+  ipcMain.handle('window:minimize', guarded(() => {
     if (mainWindow) {
       mainWindow.minimize();
     }
-  });
-  ipcMain.handle('window:close-to-tray', () => hideMainWindow());
-  ipcMain.handle('window:show', () => showMainWindow());
-  ipcMain.handle('app-settings:get', getAppSettingsForRenderer);
-  ipcMain.handle('app-settings:update', updateAppSettingsForRenderer);
-  ipcMain.handle('tray:status', (_event, status) => {
-    updateTrayFromStatus(status);
+  }));
+  ipcMain.handle('window:close-to-tray', guarded(() => hideMainWindow()));
+  ipcMain.handle('window:show', guarded(() => showMainWindow()));
+  ipcMain.handle('app-settings:get', guarded(getAppSettingsForRenderer));
+  ipcMain.handle('app-settings:update', guarded(updateAppSettingsForRenderer));
+  ipcMain.handle('tray:status', guarded((_event, status) => {
+    // The tray menu offers Start or Stop based on this payload, so accept
+    // only the two known boolean fields from the renderer.
+    if (!isPlainObject(status)) {
+      throw proxyError('invalid_body', 'tray:status payload must be an object.');
+    }
+    updateTrayFromStatus({
+      running: Boolean(status.running),
+      game_mode: Boolean(status.game_mode)
+    });
     return true;
-  });
+  }));
 }
 
 // Fix #3: when bootstrap fails (e.g. waitForBackendReady times out) we must not
@@ -1278,7 +1321,7 @@ function handleBootstrapFailure(error) {
 
 async function bootstrap() {
   app.setAppUserModelId('com.esportsisolator.pro');
-  const appSettings = readAppSettings();
+  const appSettings = syncStartupTaskState();
   if (!tray) {
     createTray();
   }

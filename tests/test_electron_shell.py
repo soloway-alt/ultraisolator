@@ -25,7 +25,10 @@ class ElectronShellContractTests(unittest.TestCase):
 
         self.assertIn("spawn(pythonCommand", main)
         self.assertIn("'-m', 'server'", main)
-        self.assertIn("'--api-token'", main)
+        # The bearer token must never appear in the backend argv (visible in
+        # the Windows process table); it travels via the spawn environment.
+        self.assertNotIn("--api-token", main)
+        self.assertIn("EII_API_TOKEN: backendApiToken", main)
         self.assertIn("show: false", main)
         self.assertIn("event.preventDefault()", main)
         self.assertIn("mainWindow.hide()", main)
@@ -40,7 +43,6 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("globalShortcut.register('CommandOrControl+Q'", main)
         self.assertIn("gracefulShutdownBackend", main)
         self.assertIn("/api/stop", main)
-        self.assertIn("--api-token", main)
         self.assertIn("backendApiToken", main)
         self.assertIn("Authorization: `Bearer ${backendApiToken}`", main)
         self.assertIn("app.disableHardwareAcceleration()", main)
@@ -51,7 +53,8 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("startTrayStatusPolling", main)
         self.assertIn("setInterval(refreshStatusOnce, 15000)", main)
         smoke = (UI / "scripts" / "smoke-test.js").read_text(encoding="utf-8")
-        self.assertIn("--api-token", smoke)
+        self.assertNotIn("--api-token", smoke)
+        self.assertIn("EII_API_TOKEN: apiToken", smoke)
         self.assertIn("Authorization: `Bearer ${apiToken}`", smoke)
 
     def test_packaged_backend_stderr_is_logged_to_user_data(self):
