@@ -278,7 +278,17 @@ class IsolatorBridge:
             running = bool(self._engine and self._engine.get_runtime_status().get("running"))
         payload = self._config_store.update(candidate, running=running)
         self._status_config = self._read_status_config()
+        self._invalidate_derived_caches()
         return payload
+
+    def _invalidate_derived_caches(self):
+        # Readiness embeds config-derived checks; a config change must not
+        # keep serving the pre-change verdict for the rest of the cache TTL.
+        with self._lock:
+            self._readiness_cache = None
+            self._readiness_cache_monotonic = 0.0
+            self._msi_cache = None
+            self._msi_cache_monotonic = 0.0
 
     def topology(self, refresh=False):
         with self._lock:
