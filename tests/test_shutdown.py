@@ -1,4 +1,5 @@
 import contextlib
+import ctypes
 import os
 import tempfile
 import threading
@@ -7,6 +8,11 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from isolator.app import EsportsIsolatorPro
+from isolator.winapi import (
+    PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+    PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+    PROCESS_POWER_THROTTLING_STATE,
+)
 
 
 @contextlib.contextmanager
@@ -243,6 +249,206 @@ class ShutdownFlowTests(unittest.TestCase):
 
         self.assertIn(4242, isolator._touched)
         isolator._remove_jail_state.assert_not_called()
+
+
+class RestoreProcessEcoQosTests(unittest.TestCase):
+    _make_isolator = ShutdownFlowTests._make_isolator
+
+    def _run_restore_with_state(self, state):
+        """Run _restore_process(4242) with a fake handle and a saved `state`.
+
+        Returns the list of PROCESS_POWER_THROTTLING_STATE writes captured from
+        SetProcessInformation as (handle, version, control_mask, state_mask).
+        """
+        isolator = self._make_isolator()
+        with isolator._state_lock:
+            isolator._touched[4242] = {
+                "name": "discord.exe",
+                "create_time": 123,
+                "state": dict(state),
+                "threads": {},
+                "source": "jail",
+                "gen": 7,
+            }
+        isolator._open_process = lambda *args, **kwargs: 99
+        isolator._get_process_create_time = lambda handle: 123
+        isolator._restore_threads_for_process = MagicMock()
+        isolator._apply_process_cpu_sets = MagicMock(return_value=True)
+        isolator._remove_jail_state = MagicMock()
+        captured = []
+
+        def set_process_information(handle, _info_class, state_ref, _size):
+            throttling = ctypes.cast(
+                state_ref, ctypes.POINTER(PROCESS_POWER_THROTTLING_STATE)
+            ).contents
+            captured.append(
+                (handle, throttling.Version, throttling.ControlMask, throttling.StateMask)
+            )
+            return 1
+
+        with patch(
+            "isolator.tuning.kernel32.SetProcessInformation",
+            side_effect=set_process_information,
+        ):
+            with patch("isolator.tuning.kernel32.CloseHandle"):
+                self.assertTrue(isolator._restore_process(4242))
+        return isolator, captured
+
+    def test_saved_control_mask_with_execution_speed_is_restored_verbatim(self):
+        exec_speed = PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        for state_mask in (exec_speed, 0):
+            with self.subTest(state_mask=state_mask):
+                _, captured = self._run_restore_with_state({
+                    "power_control_mask": exec_speed,
+                    "power_state_mask": state_mask,
+                })
+                self.assertEqual(
+                    [(99, PROCESS_POWER_THROTTLING_CURRENT_VERSION, exec_speed, state_mask)],
+                    captured,
+                )
+
+    def test_saved_control_mask_zero_forces_throttling_off(self):
+        exec_speed = PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        # Regardless of the saved state mask, a control mask without the
+        # EXECUTION_SPEED bit must restore as (EXECUTION_SPEED, 0): writing
+        # ControlMask=0 would leave a previously-enabled throttle in place.
+        for state_mask in (0, exec_speed):
+            with self.subTest(state_mask=state_mask):
+                _, captured = self._run_restore_with_state({
+                    "power_control_mask": 0,
+                    "power_state_mask": state_mask,
+                })
+                self.assertEqual(
+                    [(99, PROCESS_POWER_THROTTLING_CURRENT_VERSION, exec_speed, 0)],
+                    captured,
+                )
+
+    def test_page_priority_restore_writes_saved_value_exactly(self):
+        isolator = self._make_isolator()
+        with isolator._state_lock:
+            isolator._touched[4242] = {
+                "name": "discord.exe",
+                "create_time": 123,
+                "state": {"page_priority": 6},
+                "threads": {},
+                "source": "jail",
+                "gen": 7,
+            }
+        isolator._open_process = lambda *args, **kwargs: 99
+        isolator._get_process_create_time = lambda handle: 123
+        isolator._restore_threads_for_process = MagicMock()
+        isolator._apply_process_cpu_sets = MagicMock(return_value=True)
+        isolator._remove_jail_state = MagicMock()
+        page_calls = []
+        isolator._set_process_page_priority = (
+            lambda handle, value, **kwargs: page_calls.append((handle, value, kwargs))
+        )
+
+        with patch("isolator.tuning.kernel32.SetProcessInformation", return_value=1):
+            with patch("isolator.tuning.kernel32.CloseHandle"):
+                self.assertTrue(isolator._restore_process(4242))
+
+        self.assertEqual([(99, 6, {"exact": True})], page_calls)
+
+
+class ShutdownOrderingTests(unittest.TestCase):
+    _make_isolator = ShutdownFlowTests._make_isolator
+
+    def _record_steps(self, isolator, steps, power_scheme_side_effect=None):
+        def power_step():
+            steps.append("power")
+            if power_scheme_side_effect is not None:
+                raise power_scheme_side_effect
+
+        isolator._wait_for_process_mutations = lambda: steps.append("drain")
+        isolator._restore_power_scheme = power_step
+        isolator._restore_timer_resolution = lambda: steps.append("timer")
+        isolator._restore_ifeo_priorities = lambda: steps.append("ifeo")
+        isolator._restore_all_processes = lambda: steps.append("processes")
+        isolator._restore_system_critical = lambda: steps.append("system_critical")
+        isolator._release_single_instance = lambda: steps.append("mutex")
+
+    def test_shutdown_runs_documented_steps_in_order(self):
+        isolator = self._make_isolator()
+        steps = []
+        self._record_steps(isolator, steps)
+
+        with patch("isolator.runtime.gc.enable", side_effect=lambda: steps.append("gc_enable")), \
+                patch("isolator.runtime.gc.collect"):
+            isolator.shutdown()
+
+        self.assertEqual(
+            ["drain", "power", "timer", "ifeo", "processes", "system_critical", "gc_enable", "mutex"],
+            steps,
+        )
+
+    def test_early_step_failure_still_runs_every_later_step(self):
+        isolator = self._make_isolator()
+        steps = []
+        self._record_steps(
+            isolator, steps, power_scheme_side_effect=RuntimeError("power restore boom")
+        )
+
+        with patch("isolator.runtime.gc.enable", side_effect=lambda: steps.append("gc_enable")), \
+                patch("isolator.runtime.gc.collect"):
+            isolator.shutdown()
+
+        self.assertEqual(
+            ["drain", "power", "timer", "ifeo", "processes", "system_critical", "gc_enable", "mutex"],
+            steps,
+        )
+        self.assertTrue(
+            any("Shutdown step 2" in line and "power restore boom" in line for line in isolator.messages)
+        )
+
+    def test_fast_shutdown_skips_monitor_thread_join(self):
+        class FakeThread:
+            def __init__(self):
+                self.join_calls = []
+
+            def is_alive(self):
+                return True
+
+            def join(self, timeout=None):
+                self.join_calls.append(timeout)
+
+        for fast, expected_joins in ((True, []), (False, [3.0])):
+            with self.subTest(fast=fast):
+                isolator = self._make_isolator()
+                isolator._restore_power_scheme = MagicMock()
+                isolator._restore_timer_resolution = MagicMock()
+                isolator._restore_ifeo_priorities = MagicMock()
+                isolator._restore_all_processes = MagicMock()
+                isolator._restore_system_critical = MagicMock()
+                fake_thread = FakeThread()
+                isolator._monitor_thread = fake_thread
+
+                isolator.shutdown(fast=fast)
+
+                self.assertEqual(expected_joins, fake_thread.join_calls)
+
+    def test_concurrent_shutdown_calls_run_restore_body_exactly_once(self):
+        isolator = self._make_isolator()
+        isolator._restore_power_scheme = MagicMock()
+        isolator._restore_timer_resolution = MagicMock()
+        isolator._restore_ifeo_priorities = MagicMock()
+        isolator._restore_system_critical = MagicMock()
+        restore_calls = []
+        isolator._restore_all_processes = lambda: restore_calls.append(threading.get_ident())
+        barrier = threading.Barrier(2)
+
+        def worker():
+            barrier.wait()
+            isolator.shutdown()
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5.0)
+
+        self.assertEqual(1, len(restore_calls))
+        isolator._restore_power_scheme.assert_called_once()
 
 
 class JailStateRecoveryTests(unittest.TestCase):
