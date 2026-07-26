@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
+import { useBackendResource } from '../hooks/useBackendResource.js';
 import { useI18n } from '../i18n.jsx';
-import { requestJson } from '../utils/api.mjs';
+import { translatedNotice } from '../utils/config.mjs';
 
 function msiLabel(value, t) {
   if (value === true) {
@@ -36,35 +37,11 @@ export function AdvancedToolsPage({ live }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
-  const [payload, setPayload] = useState(null);
-  const [toolsState, setToolsState] = useState({
-    loading: true,
-    refreshing: false,
-    error: null
+  const toolsResource = useBackendResource('/api/msi', {
+    enabled: !gameMode && live.visible,
+    refreshPath: '/api/msi?refresh=1'
   });
-
-  const loadMsi = useCallback(async (refresh = false) => {
-    if (gameMode || !live.visible) {
-      setToolsState({ loading: false, refreshing: false, error: null });
-      return;
-    }
-    setToolsState({ loading: !refresh, refreshing: refresh, error: null });
-    try {
-      const nextPayload = await requestJson(`/api/msi${refresh ? '?refresh=1' : ''}`);
-      setPayload(nextPayload);
-      setToolsState({ loading: false, refreshing: false, error: null });
-    } catch (error) {
-      setToolsState({
-        loading: false,
-        refreshing: false,
-        error: error instanceof Error ? error.message : t('advanced.loadError', 'Unable to load MSI devices')
-      });
-    }
-  }, [gameMode, live.visible, t]);
-
-  useEffect(() => {
-    loadMsi(false);
-  }, [loadMsi]);
+  const payload = toolsResource.data;
 
   const devices = Array.isArray(payload?.devices) ? payload.devices : [];
   const summary = payload?.summary || { total: 0, enabled: 0, disabled: 0, unknown: 0 };
@@ -89,14 +66,14 @@ export function AdvancedToolsPage({ live }) {
       <div className="settings-toolbar">
         <div className="settings-path">{t('advanced.registryPath', 'HKLM\\SYSTEM\\CurrentControlSet\\Enum\\PCI')}</div>
         <div className="settings-actions">
-          <button type="button" onClick={() => loadMsi(true)} disabled={gameMode || toolsState.loading || toolsState.refreshing}>
-            {toolsState.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
+          <button type="button" onClick={toolsResource.reload} disabled={gameMode || toolsResource.loading || toolsResource.refreshing}>
+            {toolsResource.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
           </button>
         </div>
       </div>
 
       {gameMode ? <div className="settings-message">{t('advanced.pausedMessage', 'MSI registry inspection paused during game mode')}</div> : null}
-      {toolsState.error ? <div className="action-error">{toolsState.error}</div> : null}
+      {toolsResource.error ? <div className="action-error">{translatedNotice(toolsResource.error, t)}</div> : null}
 
       <div className="kpi-strip logs-summary-grid" aria-label="MSI summary">
         <KpiCell label={t('advanced.devices', 'Devices')} value={summary.total} detail={byClass} highlight />
@@ -138,7 +115,7 @@ export function AdvancedToolsPage({ live }) {
               {!devices.length ? (
                 <tr>
                   <td className="process-empty" colSpan={5}>
-                    {toolsState.loading ? t('advanced.loadingDevices', 'Loading MSI devices') : payload?.reason || t('advanced.noDevicesFound', 'No PCI MSI devices found')}
+                    {toolsResource.loading ? t('advanced.loadingDevices', 'Loading MSI devices') : payload?.reason || t('advanced.noDevicesFound', 'No PCI MSI devices found')}
                   </td>
                 </tr>
               ) : null}
