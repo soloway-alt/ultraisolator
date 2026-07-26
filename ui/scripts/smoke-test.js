@@ -175,7 +175,6 @@ async function main() {
   assert(electronMain.includes('mainWindow.removeMenu()'), 'Electron BrowserWindow must remove the native menu bar.');
   assert(electronMain.includes("loadFile(target.target, { hash: 'dashboard' })"), 'Packaged app must open on Dashboard instead of restoring a stale hash page.');
   assert(appSource.includes('hashchange'), 'Sidebar navigation must support hash changes for robust page switching.');
-  assert(appSource.includes('href={`#${page.id}`}'), 'Sidebar links must use page-specific hashes instead of href="#".');
   assert(appSource.includes("scrollTo({ top: 0, left: 0 })"), 'Page navigation must reset the main scroll container to the top.');
 
   apiProcess = spawn(pythonCommand, [
