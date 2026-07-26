@@ -56,10 +56,6 @@ let backendStartupError = null;
 let backendRestartCount = 0;
 let backendRestartTimer = null;
 let ipcHandlersRegistered = false;
-let liveStreamRequest = null;
-let liveStreamReconnectTimer = null;
-let liveStreamStopped = true;
-let liveStreamBuffer = '';
 let appSettingsState = null;
 let monitoringDesiredForSession = true;
 const MAX_BACKEND_RESTARTS = 4;
@@ -72,6 +68,9 @@ const { isPlainObject, proxyError, resolveBackendOperation } = require('./main/b
 // Renderer URL resolution, trust checks, and diagnostic pages; the resolver
 // caches the target so per-IPC trust checks stop stat-ing the dist build.
 const { createRendererResolver, rendererFailureUrl } = require('./main/renderer-window');
+// SSE relay between the backend /api/live stream and the renderer;
+// reconnect and frame-parsing logic is Electron-free and unit-tested.
+const { createLiveStreamRelay } = require('./main/live-stream');
 const rendererResolver = createRendererResolver({
   isPackaged: app.isPackaged,
   distIndexPath: path.join(__dirname, 'dist', 'index.html'),
@@ -625,142 +624,28 @@ function sendLiveSnapshotEvent(payload) {
   mainWindow.webContents.send('live:event', payload);
 }
 
-function parseSseFrame(frame) {
-  const lines = String(frame).split(/\r?\n/);
-  const data = [];
-  let eventName = 'message';
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim();
-    } else if (line.startsWith('data:')) {
-      data.push(line.slice(5).trimStart());
-    }
-  }
-  return { eventName, data: data.join('\n') };
-}
-
-function scheduleLiveStreamReconnect(message) {
-  if (liveStreamStopped) {
-    return;
-  }
-  if (liveStreamReconnectTimer) {
-    clearTimeout(liveStreamReconnectTimer);
-  }
-  sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'error', error: message } });
-  liveStreamReconnectTimer = setTimeout(() => {
-    liveStreamReconnectTimer = null;
-    openLiveStream();
-  }, LIVE_RECONNECT_DELAY_MS);
-  if (typeof liveStreamReconnectTimer.unref === 'function') {
-    liveStreamReconnectTimer.unref();
-  }
-}
-
-function handleLiveSseFrame(frame) {
-  const { eventName, data } = parseSseFrame(frame);
-  if (eventName === 'snapshot') {
-    try {
-      const snapshot = JSON.parse(data);
-      updateTrayFromStatus(snapshot.status);
-    } catch (_error) {
-      sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'error', error: 'malformed live frame' } });
-      return;
-    }
-  }
-  sendLiveSnapshotEvent({ eventName, data });
-}
+const liveStreamRelay = createLiveStreamRelay({
+  httpGet: (options, onResponse) => http.get(options, onResponse),
+  getBackendUrl: () => backendUrl,
+  getAuthToken: () => backendApiToken,
+  emit: sendLiveSnapshotEvent,
+  onSnapshotStatus: (status) => updateTrayFromStatus(status),
+  reconnectDelayMs: LIVE_RECONNECT_DELAY_MS
+});
 
 function stopLiveStream(options = {}) {
-  liveStreamStopped = true;
-  liveStreamBuffer = '';
-  if (liveStreamReconnectTimer) {
-    clearTimeout(liveStreamReconnectTimer);
-    liveStreamReconnectTimer = null;
-  }
-  if (liveStreamRequest) {
-    const request = liveStreamRequest;
-    liveStreamRequest = null;
-    request.destroy();
-  }
-  if (options.notify !== false) {
-    sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'paused', error: null } });
-  }
-}
-
-function openLiveStream() {
-  if (liveStreamStopped) {
-    return;
-  }
-  if (!backendUrl) {
-    scheduleLiveStreamReconnect('Backend is not ready.');
-    return;
-  }
-  if (liveStreamRequest) {
-    return;
-  }
-  const url = new URL('/api/live', backendUrl);
-  sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'connecting', error: null } });
-  const request = http.get({
-    hostname: url.hostname,
-    port: url.port,
-    path: url.pathname,
-    timeout: 0,
-    headers: {
-      Authorization: `Bearer ${backendApiToken}`
-    }
-  }, (response) => {
-    if (response.statusCode !== 200) {
-      response.resume();
-      liveStreamRequest = null;
-      const message = `live stream failed with HTTP ${response.statusCode}`;
-      if (response.statusCode === 401 || response.statusCode === 403) {
-        sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'error', error: message } });
-        return;
-      }
-      scheduleLiveStreamReconnect(message);
-      return;
-    }
-
-    sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'connected', error: null } });
-    response.setEncoding('utf8');
-    response.on('data', (chunk) => {
-      liveStreamBuffer += chunk;
-      const frames = liveStreamBuffer.split(/\r?\n\r?\n/);
-      liveStreamBuffer = frames.pop() || '';
-      for (const frame of frames) {
-        handleLiveSseFrame(frame);
-      }
-    });
-    response.on('end', () => {
-      liveStreamRequest = null;
-      liveStreamBuffer = '';
-      scheduleLiveStreamReconnect('live stream disconnected');
-    });
-  });
-  liveStreamRequest = request;
-  request.on('error', (error) => {
-    liveStreamRequest = null;
-    liveStreamBuffer = '';
-    if (!liveStreamStopped) {
-      scheduleLiveStreamReconnect(error instanceof Error ? error.message : 'live stream unavailable');
-    }
-  });
+  liveStreamRelay.stop(options);
 }
 
 function startLiveStream(event) {
   assertTrustedIpcSender(event);
-  if (liveStreamRequest && !liveStreamStopped) {
-    return { ok: true };
-  }
-  liveStreamStopped = false;
-  liveStreamBuffer = '';
-  openLiveStream();
+  liveStreamRelay.start();
   return { ok: true };
 }
 
 function stopLiveStreamForRenderer(event) {
   assertTrustedIpcSender(event);
-  stopLiveStream();
+  liveStreamRelay.stop();
   return { ok: true };
 }
 
