@@ -6,6 +6,7 @@ import gc
 import threading
 import time
 from ctypes import wintypes
+from dataclasses import dataclass, field
 
 from .winapi import (
     CONSOLE_CTRL_HANDLER,
@@ -22,6 +23,61 @@ from .winapi import (
     ntdll,
     user32,
 )
+
+
+@dataclass
+class MonitorCycle:
+    """State the monitor loop carries between (and within) poll cycles.
+
+    Previously these were 15 loop-carried locals inside a 224-line
+    _monitor_loop; naming them lets each _advance_* step take-and-mutate one
+    object and be tested against a plain fixture. Lives here (not app.py)
+    because runtime.py cannot import from app.py without a cycle.
+
+    Fields marked "per cycle" are reset by the loop before each iteration;
+    the rest persist across cycles for the lifetime of the monitor thread.
+    """
+
+    # -- game observation state (persists) --
+    active_games: set = field(default_factory=set)
+    pending_closed: dict = field(default_factory=dict)
+    last_known_game_pids: set = field(default_factory=set)
+    game_was_running: bool = False
+    last_game_exit_time: float = 0.0
+
+    # -- maintenance-jail scheduling (persists) --
+    last_background_jail: float = 0.0
+    last_jail_batch: float = 0.0
+    maintenance_jail_backlog: bool = False
+    maintenance_idle_streak: int = 0
+
+    # -- GC policy (persists) --
+    gc_disabled: bool = False
+    last_gc_sweep: float = 0.0
+    last_gc_gen0_sweep: float = 0.0
+
+    # -- power scheme (persists; _advance_power owns transitions) --
+    power_scheme_attempted: bool = False
+
+    # -- foreground tracking (persists) --
+    last_fg_pid: int = 0
+
+    # -- housekeeping (persists) --
+    last_cleanup: float = 0.0
+
+    # -- feature seed: ProBalance CPU-sample bookkeeping lands here as
+    #    cpu_prev: dict[pid, (busy_100ns, sampled_at)] so per-process CPU%
+    #    deltas never become loop-carried locals again. --
+
+    # -- per cycle --
+    current_game_pids: set = field(default_factory=set)
+    cleanup_due: bool = False
+    cleanup_ran: bool = False
+    game_mode_entered: bool = False
+
+    @classmethod
+    def create(cls, now):
+        return cls(last_cleanup=now, last_gc_sweep=now, last_gc_gen0_sweep=now)
 
 
 class RuntimeMixin:
@@ -201,38 +257,212 @@ class RuntimeMixin:
             while self._active_mutations > 0:
                 self._mutation_idle.wait()
 
-    def _monitor_loop(self):
-        last_fg_pid = 0
-        active_games = set()
-        last_cleanup = time.monotonic()
-        power_scheme_attempted = False
-        gc_disabled = False
-        last_gc_sweep = time.monotonic()
-        last_gc_gen0_sweep = time.monotonic()
-        last_background_jail = 0.0
-        last_jail_batch = 0.0
-        maintenance_jail_backlog = False
-        maintenance_idle_streak = 0
-        game_was_running = False
-        last_game_exit_time = 0.0
-        pending_closed = {}
-        last_known_game_pids = set()
+    def _advance_game_tracking(self, cycle, now, processes):
+        """Detect game launches/closes and run the due dead-entry cleanup.
 
-        # WHY: Hoist attribute lookups out of the hot loop. CPython resolves
-        # self.attr via __dict__ lookup + descriptor protocol on every access.
-        # For attributes accessed every poll cycle (every 2s during game mode),
-        # caching them as local variables eliminates ~20 dict lookups per cycle.
-        # Local variable access is a single LOAD_FAST bytecode vs LOAD_ATTR.
-        _self_pid = self._self_pid
+        Optimizes newly-observed games, restores debounce-confirmed closed
+        ones, and refreshes cycle.current_game_pids / active_games /
+        last_known_game_pids for the steps that follow.
+        """
+        observed_games = self._find_game_process_entries(processes)
+        cycle.current_game_pids = set(observed_games)
+        cycle.last_known_game_pids = cycle.current_game_pids
+        new_games, confirmed_closed, cycle.active_games, cycle.pending_closed = (
+            self._update_active_game_observations(
+                observed_games,
+                cycle.pending_closed,
+                now,
+            )
+        )
+        if cycle.cleanup_due:
+            self._cleanup_dead_processes(processes, game_pids=cycle.active_games)
+            cycle.last_cleanup = now
+            cycle.cleanup_ran = True
+
+        for pid in new_games:
+            tuning_state = self._optimize_game_with_state(
+                pid,
+                observed_games[pid],
+                classified_as_game=True,
+            )
+            self._set_active_game_tuning_state(pid, tuning_state)
+        for pid in confirmed_closed:
+            self._restore_process(pid)
+            self._log(f"[GAME] Game closed: pid={pid}")
+
+    def _advance_game_mode(self, cycle, now, processes):
+        """Drive the game-mode entry/exit transitions.
+
+        Entry: refresh topology, reset the jail/GC clocks, run the initial
+        background-jail pass, and mark cycle.game_mode_entered so the
+        maintenance step skips this cycle (preserving the old if/elif shape).
+        Exit: after the debounce and the exit-restore delay, restore all
+        touched processes, re-enable GC, and revert the power scheme.
+        """
+        if cycle.current_game_pids:
+            cycle.last_game_exit_time = 0.0
+            if not cycle.game_was_running:
+                cycle.game_was_running = True
+                cycle.game_mode_entered = True
+                cycle.maintenance_jail_backlog = False
+                cycle.maintenance_idle_streak = 0
+                cycle.last_background_jail = now
+                cycle.last_jail_batch = now
+                self._refresh_topology("game_mode_entry")
+                # WHY: Reset GC sweep timers when entering game mode so the
+                # next sweeps respect the configured intervals rather than
+                # firing immediately because the timers were last updated
+                # minutes/hours ago in idle mode.
+                cycle.last_gc_gen0_sweep = now
+                cycle.last_gc_sweep = now
+                self._log("==================================================")
+                if self.enable_background_jailing:
+                    self._log("[INFO] Entering Game Mode. Jailing background processes...")
+                else:
+                    self._log("[INFO] Entering Game Mode.")
+                stats = self._run_background_jail(initial=True, processes=processes)
+                cycle.maintenance_jail_backlog = bool(stats.get("deferred")) if isinstance(stats, dict) else False
+                self._log("==================================================")
+            return
+
+        if not cycle.game_was_running:
+            return
+        if cycle.pending_closed:
+            # A pid is still inside the close debounce: not a real exit yet,
+            # so the exit-delay clock must not run. Returning here also fixes
+            # a latent bug in the pre-decomposition code, which reset the
+            # timer to the 0.0 sentinel and then still evaluated
+            # `now - 0.0 > delay` — always true against a real uptime-scale
+            # monotonic clock, so a single missed SPI poll of a running game
+            # triggered a full restore mid-debounce. The old fake-clock tests
+            # started at t=0 and masked it.
+            cycle.last_game_exit_time = 0.0
+            return
+        if cycle.last_game_exit_time == 0.0:
+            cycle.last_game_exit_time = now
+
+        if now - cycle.last_game_exit_time > self.game_exit_restore_delay_s:
+            cycle.game_was_running = False
+            self._log("==================================================")
+            self._log(
+                f"[INFO] All games closed for {self.game_exit_restore_delay_s:.0f}s. "
+                "System restored to normal stable state."
+            )
+            self._restore_all_processes()
+            self._log("==================================================")
+
+            if cycle.gc_disabled:
+                gc.enable()
+                gc.collect()
+                cycle.gc_disabled = False
+                self._log("[INFO] Python GC re-enabled and memory collected.")
+            if self._power_plan_active or getattr(self, "_power_scheme_set_unverified", False):
+                self._restore_power_scheme()
+            cycle.power_scheme_attempted = False
+            cycle.maintenance_jail_backlog = False
+            cycle.maintenance_idle_streak = 0
+
+    def _advance_maintenance_jail(self, cycle, now, processes):
+        """Re-jail on a dedicated interval to catch processes spawned AFTER
+        Game Mode started. Backlog batches use batch_cooldown instead of
+        poll_interval_active to avoid syscall storms every 2s; quiet streaks
+        pause maintenance entirely until the interval clock comes around.
+
+        No-op outside game mode and on the entry cycle (the entry transition
+        already ran the initial jail pass).
+        """
+        if not cycle.current_game_pids or cycle.game_mode_entered:
+            return
+        if not self.enable_background_jailing:
+            return
+        if not self._maintenance_jail_due(
+            now, cycle.last_background_jail, cycle.last_jail_batch, cycle.maintenance_jail_backlog
+        ):
+            return
+        skip_quiet_maintenance = (
+            not cycle.maintenance_jail_backlog
+            and cycle.maintenance_idle_streak >= self.maintenance_skip_after_quiet_cycles
+        )
+        if skip_quiet_maintenance:
+            cycle.last_background_jail = now
+            return
+        stats = self._run_background_jail(initial=False, processes=processes)
+        cycle.last_jail_batch = now
+        cycle.maintenance_jail_backlog = bool(stats.get("deferred")) if isinstance(stats, dict) else False
+        if isinstance(stats, dict) and stats.get("touched", 0) == 0 and stats.get("deferred", 0) == 0:
+            cycle.maintenance_idle_streak += 1
+        else:
+            cycle.maintenance_idle_streak = 0
+        if not cycle.maintenance_jail_backlog:
+            cycle.last_background_jail = now
+
+    def _advance_gc_policy(self, cycle, now):
+        """GC policy while a game is active: disable the collector, then run
+        cheap gen0 sweeps every 30s and a full collect on the configured
+        interval.
+
+        WHY: Generational GC instead of full collect every 5 min. gen0 collect
+        touches only ~500 young objects (sub-ms pause). Full collect every
+        10 min instead of 5 reduces the frequency of the expensive 30-50ms
+        stop-the-world pauses that cause frame skips on 144Hz+ displays.
+        Re-enabling on game exit is part of _advance_game_mode's exit path so
+        it stays coupled to the restore transition.
+        """
+        if not cycle.current_game_pids:
+            return
+        if not cycle.gc_disabled:
+            gc.disable()
+            cycle.gc_disabled = True
+            self._log("[INFO] Python GC disabled to prevent micro-stutters.")
+        if now - cycle.last_gc_gen0_sweep > 30.0:
+            gc.collect(0)
+            cycle.last_gc_gen0_sweep = now
+        if now - cycle.last_gc_sweep > self.gc_full_collect_interval_s:
+            gc.collect()
+            cycle.last_gc_sweep = now
+
+    def _advance_power(self, cycle, now):
+        """Attempt the performance power-scheme switch once per game session.
+
+        The restore path lives in _advance_game_mode's exit transition. The
+        IdleSaver feature will grow this step into the single owner of the
+        ORIGINAL/PERFORMANCE/SAVER plan state machine.
+        """
+        if not cycle.current_game_pids:
+            return
+        if self._power_plan_active or cycle.power_scheme_attempted:
+            return
+        switched = self._set_preferred_power_scheme()
+        if switched and self._power_plan_active:
+            self._refresh_topology("power_scheme_switch")
+        cycle.power_scheme_attempted = True
+
+    def _advance_foreground(self, cycle, now):
+        """Track foreground-window changes with the transition debounce.
+
+        WHY: Reuse the pre-allocated _fg_pid_dword and its byref instead of
+        creating wintypes.DWORD() + ctypes.byref() every poll cycle — on the
+        hot path (~500 cycles/1000s of game play) that would be 2 allocations
+        per cycle of immediate garbage.
+        """
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(self._fg_pid_dword))
+        fg_pid = self._fg_pid_dword.value
+        if fg_pid == cycle.last_fg_pid:
+            return
+        if self._foreground_transition_due(now, self._last_fg_transition_time):
+            self._handle_foreground_transition(cycle.last_fg_pid, fg_pid, cycle.game_was_running)
+            self._last_fg_transition_time = now
+        cycle.last_fg_pid = fg_pid
+
+    def _monitor_loop(self):
+        cycle = MonitorCycle.create(time.monotonic())
         _stop_event = self._stop_event
-        _fg_pid_dword = self._fg_pid_dword
-        _fg_pid_byref = ctypes.byref(_fg_pid_dword)
-        _GetForegroundWindow = user32.GetForegroundWindow
-        _GetWindowThreadProcessId = user32.GetWindowThreadProcessId
         _poll_active = self.poll_interval_active_s
         _poll_idle = self.poll_interval_idle_s
         _monotonic = time.monotonic
-        _maintenance_jail_due = self._maintenance_jail_due
 
         while not _stop_event.is_set():
             # WHY (item 6): In fast shutdown (console close / logoff / OS
@@ -268,161 +498,38 @@ class RuntimeMixin:
                     "[INFO] Process enumeration returned no entries; keeping the last game observation.",
                 )
                 with self._state_lock:
-                    active_games = set(self._active_games)
-                next_interval = _poll_active if active_games else _poll_idle
+                    cycle.active_games = set(self._active_games)
+                next_interval = _poll_active if cycle.active_games else _poll_idle
                 if _stop_event.wait(next_interval):
                     break
                 continue
 
-            cleanup_due = now - last_cleanup > 60.0
-            current_game_pids = set()
-            cleanup_ran = False
+            cycle.cleanup_due = now - cycle.last_cleanup > 60.0
+            cycle.current_game_pids = set()
+            cycle.cleanup_ran = False
+            cycle.game_mode_entered = False
             try:
-                observed_games = self._find_game_process_entries(processes)
-                current_game_pids = set(observed_games)
-                last_known_game_pids = current_game_pids
-                new_games, confirmed_closed, active_games, pending_closed = self._update_active_game_observations(
-                    observed_games,
-                    pending_closed,
-                    now,
-                )
-                if cleanup_due:
-                    self._cleanup_dead_processes(processes, game_pids=active_games)
-                    last_cleanup = now
-                    cleanup_ran = True
-
-                for pid in new_games:
-                    tuning_state = self._optimize_game_with_state(
-                        pid,
-                        observed_games[pid],
-                        classified_as_game=True,
-                    )
-                    self._set_active_game_tuning_state(pid, tuning_state)
-                for pid in confirmed_closed:
-                    self._restore_process(pid)
-                    self._log(f"[GAME] Game closed: pid={pid}")
-
-                if current_game_pids:
-                    last_game_exit_time = 0.0
-                    if not game_was_running:
-                        game_was_running = True
-                        maintenance_jail_backlog = False
-                        maintenance_idle_streak = 0
-                        last_background_jail = now
-                        last_jail_batch = now
-                        self._refresh_topology("game_mode_entry")
-                        # WHY: Reset GC sweep timers when entering game mode
-                        # so the next sweeps respect the configured intervals
-                        # rather than firing immediately because the timers
-                        # were last updated minutes/hours ago in idle mode.
-                        last_gc_gen0_sweep = now
-                        last_gc_sweep = now
-                        self._log("==================================================")
-                        if self.enable_background_jailing:
-                            self._log("[INFO] Entering Game Mode. Jailing background processes...")
-                        else:
-                            self._log("[INFO] Entering Game Mode.")
-                        stats = self._run_background_jail(initial=True, processes=processes)
-                        maintenance_jail_backlog = bool(stats.get("deferred")) if isinstance(stats, dict) else False
-                        self._log("==================================================")
-                    # WHY: Re-jail on a dedicated interval to catch processes spawned
-                    # AFTER Game Mode started. Backlog batches use batch_cooldown
-                    # instead of poll_interval_active to avoid syscall storms every 2s.
-                    elif self.enable_background_jailing and _maintenance_jail_due(
-                        now, last_background_jail, last_jail_batch, maintenance_jail_backlog
-                    ):
-                        skip_quiet_maintenance = (
-                            not maintenance_jail_backlog
-                            and maintenance_idle_streak >= self.maintenance_skip_after_quiet_cycles
-                        )
-                        if skip_quiet_maintenance:
-                            last_background_jail = now
-                        else:
-                            stats = self._run_background_jail(initial=False, processes=processes)
-                            last_jail_batch = now
-                            maintenance_jail_backlog = bool(stats.get("deferred")) if isinstance(stats, dict) else False
-                            if isinstance(stats, dict) and stats.get("touched", 0) == 0 and stats.get("deferred", 0) == 0:
-                                maintenance_idle_streak += 1
-                            else:
-                                maintenance_idle_streak = 0
-                            if not maintenance_jail_backlog:
-                                last_background_jail = now
-
-                    if not gc_disabled:
-                        gc.disable()
-                        gc_disabled = True
-                        self._log("[INFO] Python GC disabled to prevent micro-stutters.")
-                    # WHY: Generational GC instead of full collect every 5 min.
-                    # gen0 collect touches only ~500 young objects (sub-ms pause).
-                    # Full collect every 10 min instead of 5 reduces the frequency
-                    # of the expensive 30-50ms stop-the-world pauses that cause
-                    # frame skips on 144Hz+ displays.
-                    if gc_disabled:
-                        if now - last_gc_gen0_sweep > 30.0:
-                            gc.collect(0)
-                            last_gc_gen0_sweep = now
-                        if now - last_gc_sweep > self.gc_full_collect_interval_s:
-                            gc.collect()
-                            last_gc_sweep = now
-                    if not self._power_plan_active and not power_scheme_attempted:
-                        switched = self._set_preferred_power_scheme()
-                        if switched and self._power_plan_active:
-                            self._refresh_topology("power_scheme_switch")
-                        power_scheme_attempted = True
-
-                elif not current_game_pids:
-                    if game_was_running:
-                        if pending_closed:
-                            last_game_exit_time = 0.0
-                        elif last_game_exit_time == 0.0:
-                            last_game_exit_time = now
-
-                        if now - last_game_exit_time > self.game_exit_restore_delay_s:
-                            game_was_running = False
-                            self._log("==================================================")
-                            self._log(
-                                f"[INFO] All games closed for {self.game_exit_restore_delay_s:.0f}s. "
-                                "System restored to normal stable state."
-                            )
-                            self._restore_all_processes()
-                            self._log("==================================================")
-
-                            if gc_disabled:
-                                gc.enable()
-                                gc.collect()
-                                gc_disabled = False
-                                self._log("[INFO] Python GC re-enabled and memory collected.")
-                            if self._power_plan_active or getattr(self, "_power_scheme_set_unverified", False):
-                                self._restore_power_scheme()
-                            power_scheme_attempted = False
-                            maintenance_jail_backlog = False
-                            maintenance_idle_streak = 0
-
-                # WHY: Reuse the pre-allocated _fg_pid_dword and its byref instead
-                # of creating wintypes.DWORD() + ctypes.byref() every poll cycle.
-                # On the hot path (~500 cycles/1000s of game play), this eliminates
-                # 2 object allocations per cycle that become immediate garbage.
-                hwnd = _GetForegroundWindow()
-                if hwnd:
-                    _GetWindowThreadProcessId(hwnd, _fg_pid_byref)
-                    fg_pid = _fg_pid_dword.value
-                    if fg_pid != last_fg_pid:
-                        if self._foreground_transition_due(now, self._last_fg_transition_time):
-                            self._handle_foreground_transition(last_fg_pid, fg_pid, game_was_running)
-                            self._last_fg_transition_time = now
-                        last_fg_pid = fg_pid
+                self._advance_game_tracking(cycle, now, processes)
+                self._advance_game_mode(cycle, now, processes)
+                self._advance_maintenance_jail(cycle, now, processes)
+                self._advance_gc_policy(cycle, now)
+                self._advance_power(cycle, now)
+                # Feature seed: _advance_probalance(cycle, now, processes,
+                # cpu_samples) slots in here, between the batch jail and the
+                # foreground tracking.
+                self._advance_foreground(cycle, now)
             except Exception as exc:
                 # WHY: _log_once folds monitor exceptions by type plus a
                 # scrubbed message fingerprint, so distinct failures remain
                 # visible without letting volatile pid/path details flood logs.
                 self._log_once(("monitor_exception", type(exc).__name__), f"[WARN] Monitor loop error: {exc}")
             finally:
-                if cleanup_due and not cleanup_ran:
-                    game_pids = last_known_game_pids if last_known_game_pids else active_games
+                if cycle.cleanup_due and not cycle.cleanup_ran:
+                    game_pids = cycle.last_known_game_pids if cycle.last_known_game_pids else cycle.active_games
                     self._cleanup_dead_processes(processes, game_pids=game_pids)
-                    last_cleanup = now
+                    cycle.last_cleanup = now
 
-            next_interval = _poll_active if active_games else _poll_idle
+            next_interval = _poll_active if cycle.active_games else _poll_idle
             if _stop_event.wait(next_interval):
                 break
 

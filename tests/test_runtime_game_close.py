@@ -141,6 +141,33 @@ class MonitorLoopGameCloseTests(unittest.TestCase):
         # Full restore waits a further game_exit_restore_delay_s after the exit.
         self.assertEqual([("restore_all", 12.0)], [e for e in events if e[0] == "restore_all"])
 
+    def test_first_miss_on_uptime_scale_clock_does_not_restore(self):
+        # Regression: the exit path used a 0.0 "timer not started" sentinel
+        # and then evaluated `now - 0.0 > delay`, which is always true when
+        # the monotonic clock is uptime-scale (hours). A single missed SPI
+        # poll of a still-running game then triggered a full restore inside
+        # the close-debounce window. Fake clocks starting at t=0 masked it.
+        isolator = self._make_isolator()
+        clock = _FakeClock(start=1_000_000.0)
+        isolator._stop_event = _ScriptedStopEvent(clock, max_cycles=2)
+        events = []
+        isolator._get_processes = lambda: (
+            [(10, "cs2.exe"), (99, "other.exe")]
+            if clock.value == 1_000_000.0
+            else [(99, "other.exe")]
+        )
+        isolator._optimize_game_with_state = (
+            lambda pid, name=None, classified_as_game=False: "tuned"
+        )
+        isolator._restore_process = lambda pid: events.append(("restore", pid)) or True
+        isolator._restore_all_processes = lambda: events.append(("restore_all", clock.value))
+
+        self._run_monitor_loop(isolator, clock)
+
+        # Cycle 2 is the FIRST miss: the pid is pending-closed, so neither the
+        # per-game restore nor the full restore may run.
+        self.assertEqual([], events)
+
     def test_empty_snapshot_does_not_trigger_game_close_or_restore(self):
         isolator = self._make_isolator()
         clock = _FakeClock()
