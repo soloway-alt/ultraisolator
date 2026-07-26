@@ -69,7 +69,7 @@ export const TopologyPage = memo(function TopologyPage({ live }) {
       <div className="settings-toolbar topology-toolbar">
         <div className="settings-path">
           {topology?.refresh?.blocked_reason
-            ? t('topology.refreshBlocked', 'Refresh blocked: {{reason}}').replace('{{reason}}', topology.refresh.blocked_reason)
+            ? t('topology.refreshBlocked', 'Refresh blocked: {{reason}}', { reason: topology.refresh.blocked_reason })
             : t('topology.readOnly', 'Read-only CPU map')}
         </div>
         <div className="settings-actions">
@@ -82,10 +82,10 @@ export const TopologyPage = memo(function TopologyPage({ live }) {
       {topologyResource.error ? <div className="action-error">{translatedNotice(topologyResource.error, t)}</div> : null}
 
       <div className="kpi-strip topology-summary-grid" aria-label="Topology summary">
-        <KpiCell label={t('topology.totalCores', 'Total Cores')} value={summary.core_count ?? cores.length} detail={t('topology.logicalProcessors', '{{count}} logical processors').replace('{{count}}', summary.logical_processor_count ?? 0)} highlight />
-        <KpiCell label={partitionLabel('game')} value={partitions.game?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU assignments').replace('{{count}}', partitions.game?.logical_processor_count ?? 0)} tone="positive" />
-        <KpiCell label={partitionLabel('background')} value={partitions.background?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU assignments').replace('{{count}}', partitions.background?.logical_processor_count ?? 0)} />
-        <KpiCell label={partitionLabel('housekeeping')} value={partitions.housekeeping?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU assignments').replace('{{count}}', partitions.housekeeping?.logical_processor_count ?? 0)} />
+        <KpiCell label={t('topology.totalCores', 'Total Cores')} value={summary.core_count ?? cores.length} detail={t('topology.logicalProcessors', '{{count}} logical processors', { count: summary.logical_processor_count ?? 0 })} highlight />
+        <KpiCell label={partitionLabel('game')} value={partitions.game?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU assignments', { count: partitions.game?.logical_processor_count ?? 0 })} tone="positive" />
+        <KpiCell label={partitionLabel('background')} value={partitions.background?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU assignments', { count: partitions.background?.logical_processor_count ?? 0 })} />
+        <KpiCell label={partitionLabel('housekeeping')} value={partitions.housekeeping?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU assignments', { count: partitions.housekeeping?.logical_processor_count ?? 0 })} />
       </div>
 
       <div className="topology-layout">
@@ -115,7 +115,7 @@ export const TopologyPage = memo(function TopologyPage({ live }) {
                     <span>LLC {llc.llc_index}</span>
                     <span>{t('topology.group', 'Group')} {llc.group}</span>
                     <span>{formatCacheSize(llc.l3_size_bytes)}</span>
-                    <span>{t('topology.coresCount', '{{count}} cores').replace('{{count}}', llc.cores.length)}</span>
+                    <span>{t('topology.coresCount', '{{count}} cores', { count: llc.cores.length })}</span>
                   </div>
                   <div className="core-grid">
                     {llc.cores.map((core) => {
@@ -134,7 +134,7 @@ export const TopologyPage = memo(function TopologyPage({ live }) {
                           <span className="core-index">C{core.core_index}</span>
                           <span className="core-type">{coreTypeLabel(core)}</span>
                           <span className="core-partition">{translatedPartition}</span>
-                          <span className="core-logicals">{t('topology.logicalProcessorsShort', '{{count}} LP').replace('{{count}}', core.logical_processor_count)}</span>
+                          <span className="core-logicals">{t('topology.logicalProcessorsShort', '{{count}} LP', { count: core.logical_processor_count })}</span>
                         </button>
                       );
                     })}

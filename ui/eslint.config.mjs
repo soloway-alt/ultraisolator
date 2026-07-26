@@ -39,6 +39,15 @@ export default [
       // deliberately; new violations still surface in review and CI logs.
       'react-hooks/exhaustive-deps': 'warn',
       'unused-imports/no-unused-imports': 'error',
+      // Interpolation goes through t(key, fallback, params); string-replacing
+      // {{tokens}} on translated output bypasses the catalog parameters.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='replace'][arguments.0.value=/^\\{\\{/]",
+          message: 'Use the t(key, fallback, params) third argument instead of .replace(\'{{token}}\', …).'
+        }
+      ],
       'no-unused-vars': [
         'error',
         {

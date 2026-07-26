@@ -35,7 +35,7 @@ function formatPriorityLabel(priorityClass, t) {
   }
   return t(
     `priority.${priorityClass}`,
-    PRIORITY_CLASS_LABELS[priorityClass] || t('priority.class', 'Class {{value}}').replace('{{value}}', priorityClass)
+    PRIORITY_CLASS_LABELS[priorityClass] || t('priority.class', 'Class {{value}}', { value: priorityClass })
   );
 }
 

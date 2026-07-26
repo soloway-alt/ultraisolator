@@ -72,7 +72,7 @@ export const DashboardPage = memo(function DashboardPage({ live }) {
     : t('dashboard.notApplied', 'Not applied');
   const antiCheatMode = status.anti_cheat_mode ? formatAntiCheatMode(status.anti_cheat_mode, t) : (isRunning ? t('common.na', 'N/A') : t('dashboard.monitoringPaused', 'Monitoring paused'));
   const profileName = status.anti_cheat_mode
-    ? t('dashboard.profileName', '{{mode}} protection').replace('{{mode}}', antiCheatMode)
+    ? t('dashboard.profileName', '{{mode}} protection', { mode: antiCheatMode })
     : t('dashboard.profilePending', 'Protection profile');
   const activeGameName = activeGame?.name || t('dashboard.noGame', 'No game detected');
   const activeGameTuningState = activeGame?.tuning_state || (gameMode ? 'applied' : 'pending');
@@ -171,7 +171,7 @@ export const DashboardPage = memo(function DashboardPage({ live }) {
     } catch (error) {
       setActionState({
         pending: null,
-        error: error instanceof Error ? error.message : t('dashboard.actionFailed', '{{action}} failed').replace('{{action}}', action),
+        error: error instanceof Error ? error.message : t('dashboard.actionFailed', '{{action}} failed', { action }),
         lastAction: action
       });
     }
@@ -249,7 +249,7 @@ export const DashboardPage = memo(function DashboardPage({ live }) {
             : recoveryClean
               ? t('dashboard.recoveryCleanDetail', 'Windows settings can be restored safely')
               : reportedFailureCount
-                ? t('dashboard.recoveryAttentionDetail', '{{count}} recovery issues need review').replace('{{count}}', reportedFailureCount)
+                ? t('dashboard.recoveryAttentionDetail', '{{count}} recovery issues need review', { count: reportedFailureCount })
                 : t('dashboard.recoveryReview', 'Review recovery status before starting')}</small>
         </div>
         <div className="dashboard-trust-item is-ready">

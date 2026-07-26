@@ -308,7 +308,7 @@ export function FirstRunWizard({ status = {}, connectionState = 'idle', snapshot
             })}
           </ol>
           <div className="first-run-aside-note">
-            <span>{t('firstRun.stepCount', 'Step {{step}} of {{count}}').replace('{{step}}', step).replace('{{count}}', STEP_COUNT)}</span>
+            <span>{t('firstRun.stepCount', 'Step {{step}} of {{count}}', { step, count: STEP_COUNT })}</span>
             <strong>{t('firstRun.localReversible', 'Local. Reversible. Transparent.')}</strong>
           </div>
         </aside>
@@ -337,7 +337,7 @@ export function FirstRunWizard({ status = {}, connectionState = 'idle', snapshot
               ) : (
                 <button type="button" className="primary" disabled={isBusy || !reviewConfig} onClick={() => applyPreset(selectedPreset)}>
                   {isBusy
-                    ? t('firstRun.applying', 'Applying {{preset}}').replace('{{preset}}', presetLabel(selectedPreset))
+                    ? t('firstRun.applying', 'Applying {{preset}}', { preset: presetLabel(selectedPreset) })
                     : t('firstRun.apply', 'Apply profile')}
                 </button>
               )}

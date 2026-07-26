@@ -38,9 +38,10 @@ function reasonText(payload, t) {
     return t('logs.reason.loading', 'Loading logs');
   }
   if (payload.available) {
-    return t('logs.reason.available', 'Showing latest {{count}} of {{limit}} lines')
-      .replace('{{count}}', payload.entries?.length ?? 0)
-      .replace('{{limit}}', payload.limit ?? LOG_LIMIT);
+    return t('logs.reason.available', 'Showing latest {{count}} of {{limit}} lines', {
+      count: payload.entries?.length ?? 0,
+      limit: payload.limit ?? LOG_LIMIT
+    });
   }
   if (payload.reason === 'log_file_not_configured') {
     return t('logs.reason.notConfigured', 'Set log_file in Settings to enable file logs');

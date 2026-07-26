@@ -111,7 +111,7 @@ export function SystemAnalysis({ live }) {
           </div>
           <div className="analysis-score-detail">
             {analysis?.available
-              ? t('analysis.gradeLine', '{{grade}} grade').replace('{{grade}}', gradeText)
+              ? t('analysis.gradeLine', '{{grade}} grade', { grade: gradeText })
               : gameMode
                 ? t('analysis.noGameAnalysis', 'Setup quality pauses while a game is active')
                 : hiddenWindow
