@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import os
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -409,6 +410,121 @@ class HttpApiTests(unittest.TestCase):
                 thread.join(timeout=2)
 
         self.assertNotIn("ConnectionAbortedError", stderr.getvalue())
+
+    def test_config_put_treats_connection_aborted_as_client_disconnect(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = IsolatorBridge(
+                config_path=str(Path(tmpdir) / "config.json"),
+                engine_factory=lambda *_args: FakeEngine(),
+            )
+            handler_class = create_handler(bridge)
+
+            def aborting_send(_handler, _status, _payload):
+                raise ConnectionAbortedError("client closed")
+
+            handler_class._send_json = aborting_send
+            server = create_server(("127.0.0.1", 0), handler_class)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            stderr = io.StringIO()
+            conn = None
+            with contextlib.redirect_stderr(stderr):
+                thread.start()
+                try:
+                    conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                    conn.request("PUT", "/api/config", body='{"enable_background_jailing": true}')
+                    with self.assertRaises(http.client.RemoteDisconnected):
+                        conn.getresponse()
+                finally:
+                    if conn is not None:
+                        conn.close()
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=2)
+
+        self.assertNotIn("ConnectionAbortedError", stderr.getvalue())
+
+    def _request_status(self, method, path, body=None, headers=None):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+        server = create_server(("127.0.0.1", 0), create_handler(bridge))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = None
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            conn.request(method, path, body=body, headers=headers or {})
+            response = conn.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+            return response.status, payload
+        finally:
+            if conn is not None:
+                conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_chunked_transfer_encoding_is_rejected_with_501(self):
+        status, payload = self._request_status(
+            "PUT",
+            "/api/config",
+            body='{"enable_background_jailing": true}',
+            headers={"Transfer-Encoding": "chunked"},
+        )
+
+        self.assertEqual(501, status)
+        self.assertEqual("transfer_encoding_unsupported", payload["error"])
+
+    def test_malformed_content_length_is_rejected_with_400(self):
+        status, payload = self._request_status(
+            "POST", "/api/stop", headers={"Content-Length": "banana"}
+        )
+
+        self.assertEqual(400, status)
+        self.assertEqual("invalid_content_length", payload["error"])
+
+    def test_oversized_declared_body_is_rejected_with_413(self):
+        status, payload = self._request_status(
+            "POST", "/api/stop", headers={"Content-Length": str(70 * 1024)}
+        )
+
+        self.assertEqual(413, status)
+        self.assertEqual("body_too_large", payload["error"])
+
+    def test_empty_config_put_is_rejected_instead_of_silently_succeeding(self):
+        status, payload = self._request_status("PUT", "/api/config")
+
+        self.assertEqual(400, status)
+        self.assertEqual("invalid_config", payload["error"])
+
+    def test_unhandled_engine_error_returns_error_id_and_logs_traceback(self):
+        class ExplodingEngine:
+            def get_runtime_status(self):
+                raise RuntimeError("engine exploded")
+
+        bridge = IsolatorBridge(engine_factory=lambda *_args: ExplodingEngine())
+        bridge._engine = ExplodingEngine()
+        server = create_server(("127.0.0.1", 0), create_handler(bridge))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = None
+        try:
+            with self.assertLogs("server.http_api", level="ERROR") as captured:
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                conn.request("GET", "/api/status")
+                response = conn.getresponse()
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            if conn is not None:
+                conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(500, response.status)
+        self.assertEqual("RuntimeError", payload["error"])
+        self.assertTrue(payload["error_id"])
+        joined = "\n".join(captured.output)
+        self.assertIn(payload["error_id"], joined)
+        self.assertIn("engine exploded", joined)
 
     def test_live_stream_uses_cancellable_wait_instead_of_sleep(self):
         source = (ROOT / "server" / "http_api.py").read_text(encoding="utf-8")

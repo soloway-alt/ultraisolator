@@ -2,7 +2,9 @@
 
 import argparse
 import ctypes
+import logging
 import os
+import sys
 import threading
 
 from isolator.winapi import is_process_elevated
@@ -69,6 +71,10 @@ def main(argv=None):
         help="Allow unauthenticated loopback API access. Intended only for local development.",
     )
     args = parser.parse_args(argv)
+    # Server-side failures (500s, mid-stream engine errors) log tracebacks
+    # through logging; route them to stderr, which Electron captures into the
+    # backend log stream, so field failures stay diagnosable.
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     if not args.api_token and not args.allow_unauthenticated_loopback:
         parser.error("--api-token or EII_API_TOKEN is required; use --allow-unauthenticated-loopback only for local development.")
     if not is_process_elevated():

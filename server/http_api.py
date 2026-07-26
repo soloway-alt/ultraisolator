@@ -1,6 +1,7 @@
 """Small stdlib HTTP API for single-user localhost access."""
 
 import json
+import logging
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -8,6 +9,9 @@ from urllib.parse import parse_qs, urlparse
 
 from .bridge import AdministratorRequired, BridgeConflict
 from .config_store import ConfigError
+
+
+_LOGGER = logging.getLogger("server.http_api")
 
 
 _GET_ROUTES = {"/status", "/api/status"}
@@ -64,9 +68,17 @@ def create_handler(bridge, api_token=None):
 
     class IsolatorApiHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        # A client that declares a Content-Length and stalls must not pin a
+        # worker thread forever; a timed-out read surfaces as TimeoutError
+        # and the connection is closed quietly.
+        timeout = 30
 
         def log_message(self, _format, *_args):
+            # Access logs stay silenced; errors go through log_error below.
             return
+
+        def log_error(self, format, *args):  # noqa: A002 - stdlib signature
+            _LOGGER.error("%s - %s", self.address_string(), format % args)
 
         def _send_cors_headers(self):
             origin = _allowed_cors_origin(self.headers.get("Origin"))
@@ -131,13 +143,28 @@ def create_handler(bridge, api_token=None):
             return False
 
         def _content_length(self):
-            try:
-                return int(self.headers.get("Content-Length", "0") or "0")
-            except ValueError:
+            """Parsed Content-Length: 0 when absent, None when malformed."""
+            raw = self.headers.get("Content-Length")
+            if raw is None:
                 return 0
+            try:
+                length = int(str(raw).strip())
+            except ValueError:
+                return None
+            return length if length >= 0 else None
 
-        def _body_too_large(self):
-            if self._content_length() > _MAX_BODY_BYTES:
+        def _reject_bad_body(self):
+            # BaseHTTPRequestHandler does not decode chunked bodies; accepting
+            # the request would silently treat the body as empty, so a PUT
+            # /api/config "success" would discard the caller's settings.
+            if self.headers.get("Transfer-Encoding"):
+                self._send_json(501, {"ok": False, "error": "transfer_encoding_unsupported"})
+                return True
+            length = self._content_length()
+            if length is None:
+                self._send_json(400, {"ok": False, "error": "invalid_content_length"})
+                return True
+            if length > _MAX_BODY_BYTES:
                 self._send_json(413, {"ok": False, "error": "body_too_large"})
                 return True
             return False
@@ -161,22 +188,31 @@ def create_handler(bridge, api_token=None):
                     # Client disconnected — propagate so do_GET stays quiet.
                     raise
                 except Exception:
-                    # FIX 2: an engine exception mid-stream must not kill the
-                    # worker thread after headers are sent; log once and end the
-                    # stream cleanly so the live_client counter is released.
-                    self.log_error("live stream ended after engine error")
+                    # An engine exception mid-stream must not kill the worker
+                    # thread after headers are sent; log the traceback and end
+                    # the stream cleanly so the live_client counter is released.
+                    _LOGGER.exception("live stream ended after engine error")
             self.close_connection = True
 
+        def _read_body_bytes(self):
+            # _reject_bad_body already capped the declared length, so the
+            # loop is bounded; a stalled sender hits the socket timeout.
+            length = self._content_length() or 0
+            data = b""
+            while len(data) < length:
+                chunk = self.rfile.read(min(length - len(data), 65536))
+                if not chunk:
+                    break
+                data += chunk
+            return data
+
         def _discard_body(self):
-            length = self._content_length()
-            if length > 0:
-                self.rfile.read(length)
+            self._read_body_bytes()
 
         def _read_json_body(self):
-            length = self._content_length()
-            if length <= 0:
+            raw = self._read_body_bytes()
+            if not raw:
                 return {}
-            raw = self.rfile.read(length)
             try:
                 return json.loads(
                     raw.decode("utf-8"),
@@ -184,6 +220,30 @@ def create_handler(bridge, api_token=None):
                 )
             except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
                 raise ConfigError([{"field": "$", "message": "Request body must be valid JSON."}])
+
+        @staticmethod
+        def _bool_query(parsed, name):
+            return parse_qs(parsed.query).get(name, ["0"])[0] == "1"
+
+        def _run_request(self, handler):
+            # One error policy for every verb: client disconnects close
+            # quietly, domain errors map to their status codes, and anything
+            # unexpected is logged with a traceback plus an opaque id echoed
+            # to the client so a user report can be matched to the log.
+            try:
+                handler()
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, TimeoutError):
+                self.close_connection = True
+            except ConfigError as exc:
+                self._send_json(400, {"ok": False, "error": "invalid_config", "errors": exc.errors})
+            except BridgeConflict as exc:
+                self._send_json(409, {"ok": False, "error": str(exc)})
+            except AdministratorRequired:
+                self._send_json(403, {"error": "administrator_required"})
+            except Exception as exc:
+                error_id = secrets.token_hex(4)
+                _LOGGER.exception("unhandled API error id=%s method=%s path=%s", error_id, self.command, self.path)
+                self._send_json(500, {"ok": False, "error": type(exc).__name__, "error_id": error_id})
 
         def do_OPTIONS(self):
             self.send_response(204)
@@ -198,60 +258,39 @@ def create_handler(bridge, api_token=None):
             path = parsed.path.rstrip("/") or "/"
             if self._reject_unsafe_request():
                 return
-            # FIX 1: mirror do_POST's error handling so an engine exception or a
-            # malformed config.json (JSONDecodeError) surfaces as a clean JSON
-            # response instead of a dropped connection. ConfigError -> 400.
-            try:
+
+            def dispatch():
                 if path in _GET_ROUTES:
                     self._send_json(200, bridge.status())
-                    return
-                if path in _CONFIG_DEFAULTS_ROUTES:
+                elif path in _CONFIG_DEFAULTS_ROUTES:
                     self._send_json(200, bridge.get_config_defaults())
-                    return
-                if path in _CONFIG_ROUTES:
+                elif path in _CONFIG_ROUTES:
                     self._send_json(200, bridge.get_config())
-                    return
-                if path in _TOPOLOGY_ROUTES:
-                    query = parse_qs(parsed.query)
-                    refresh = query.get("refresh", ["0"])[0] == "1"
-                    self._send_json(200, bridge.topology(refresh=refresh))
-                    return
-                if path in _ANALYSIS_ROUTES:
+                elif path in _TOPOLOGY_ROUTES:
+                    self._send_json(200, bridge.topology(refresh=self._bool_query(parsed, "refresh")))
+                elif path in _ANALYSIS_ROUTES:
                     self._send_json(200, bridge.analysis())
-                    return
-                if path in _READINESS_ROUTES:
-                    query = parse_qs(parsed.query)
-                    refresh = query.get("refresh", ["0"])[0] == "1"
-                    self._send_json(200, bridge.readiness(refresh=refresh))
-                    return
-                if path in _MSI_ROUTES:
-                    query = parse_qs(parsed.query)
-                    refresh = query.get("refresh", ["0"])[0] == "1"
-                    self._send_json(200, bridge.msi_devices(refresh=refresh))
-                    return
-                if path in _LOG_ROUTES:
+                elif path in _READINESS_ROUTES:
+                    self._send_json(200, bridge.readiness(refresh=self._bool_query(parsed, "refresh")))
+                elif path in _MSI_ROUTES:
+                    self._send_json(200, bridge.msi_devices(refresh=self._bool_query(parsed, "refresh")))
+                elif path in _LOG_ROUTES:
                     query = parse_qs(parsed.query)
                     self._send_json(200, bridge.logs(limit=query.get("limit", ["500"])[0]))
-                    return
-                if path in _LIVE_ROUTES:
-                    query = parse_qs(parsed.query)
-                    self._stream_live(once=query.get("once", ["0"])[0] == "1")
-                    return
-                self._send_json(404, {"ok": False, "error": "not_found"})
-            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, TimeoutError):
-                # Client disconnected (e.g. closed SSE stream) — no response.
-                self.close_connection = True
-            except ConfigError as exc:
-                self._send_json(400, {"ok": False, "error": "invalid_config", "errors": exc.errors})
-            except Exception as exc:
-                self._send_json(500, {"ok": False, "error": type(exc).__name__})
+                elif path in _LIVE_ROUTES:
+                    self._stream_live(once=self._bool_query(parsed, "once"))
+                else:
+                    self._send_json(404, {"ok": False, "error": "not_found"})
+
+            self._run_request(dispatch)
 
         def do_POST(self):
             path = urlparse(self.path).path.rstrip("/") or "/"
-            if self._reject_unsafe_request() or self._body_too_large():
+            if self._reject_unsafe_request() or self._reject_bad_body():
                 return
             self._discard_body()
-            try:
+
+            def dispatch():
                 if path in _POST_START_ROUTES:
                     self._send_json(200, bridge.start())
                 elif path in _POST_STOP_ROUTES:
@@ -260,31 +299,28 @@ def create_handler(bridge, api_token=None):
                     self._send_json(200, bridge.recover())
                 else:
                     self._send_json(404, {"ok": False, "error": "not_found"})
-            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, TimeoutError):
-                self.close_connection = True
-            except BridgeConflict as exc:
-                self._send_json(409, {"ok": False, "error": str(exc)})
-            except AdministratorRequired:
-                self._send_json(403, {"error": "administrator_required"})
-            except Exception as exc:
-                self._send_json(500, {"ok": False, "error": type(exc).__name__})
+
+            self._run_request(dispatch)
 
         def do_PUT(self):
             path = urlparse(self.path).path.rstrip("/") or "/"
-            if self._reject_unsafe_request() or self._body_too_large():
+            if self._reject_unsafe_request() or self._reject_bad_body():
                 return
             if path not in _CONFIG_ROUTES:
                 self._discard_body()
                 self._send_json(404, {"ok": False, "error": "not_found"})
                 return
-            try:
+
+            def dispatch():
+                if not self._content_length():
+                    # A zero-length PUT used to merge nothing and answer 200,
+                    # convincing the caller its settings were saved.
+                    raise ConfigError([{"field": "$", "message": "Request body must not be empty."}])
                 payload = self._read_json_body()
                 if isinstance(payload, dict) and "config" in payload and len(payload) == 1:
                     payload = payload["config"]
                 self._send_json(200, bridge.update_config(payload))
-            except ConfigError as exc:
-                self._send_json(400, {"ok": False, "error": "invalid_config", "errors": exc.errors})
-            except Exception as exc:
-                self._send_json(500, {"ok": False, "error": type(exc).__name__})
+
+            self._run_request(dispatch)
 
     return IsolatorApiHandler
