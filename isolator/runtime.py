@@ -30,6 +30,14 @@ class RuntimeMixin:
             if initial:
                 self._log("[INFO] Background jailing disabled by config; skipping background process priority/affinity changes.")
             return {"touched": 0, "skipped": 0, "denied": 0, "deferred": 0, "names": []}
+        if not self._library_scan_ready.is_set():
+            # The initial Steam/Epic scan is still populating the game caches;
+            # jailing now could classify an auto-detected game as background.
+            self._log_once(
+                ("jail_waiting_library_scan",),
+                "[INFO] Waiting for the initial game-library scan before background jailing.",
+            )
+            return {"touched": 0, "skipped": 0, "denied": 0, "deferred": 0, "names": []}
         return self._isolate_background(
             max_new=self.maintenance_jail_batch_size,
             log_names=True,
@@ -243,10 +251,13 @@ class RuntimeMixin:
             processes = self._get_processes()
             if now - self._last_topology_refresh > 300.0:
                 self._refresh_topology("periodic")
-            if self.auto_detect_steam and now - self._last_steam_scan > 300.0:
-                self._scan_steam_games(force=self._last_steam_scan == float("-inf"))
-            if self.auto_detect_epic and now - self._last_epic_scan > 300.0:
-                self._scan_epic_games(force=self._last_epic_scan == float("-inf"))
+            # Library refreshes run on the scan worker so the poll loop —
+            # responsible for game launch/exit detection and the debounced
+            # restore — never stalls on filesystem walks.
+            if (self.auto_detect_steam and now - self._last_steam_scan > 300.0) or (
+                self.auto_detect_epic and now - self._last_epic_scan > 300.0
+            ):
+                self._request_library_scan()
 
             # An empty SPI result is an enumeration failure, not proof that every
             # process exited. Keep all observation/debounce state unchanged and

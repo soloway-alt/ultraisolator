@@ -5,6 +5,7 @@ import gc
 import json
 import os
 import re
+import threading
 import time
 import winreg
 from ctypes import wintypes
@@ -40,8 +41,45 @@ _PROTECTED_GAME_TITLES = frozenset({
 })
 _PROTECTED_TITLE_TOKENS = ("easyanticheat", "battleye", "beservice", "vgc", "vgtray")
 
+# WHY: A wall-clock ceiling per provider scan pass. Multi-terabyte game
+# libraries can hold tens of thousands of files; without a budget one slow
+# disk turns a background refresh into minutes of I/O.
+LIBRARY_SCAN_BUDGET_S = 15.0
+
 
 class DiscoveryMixin:
+    def _request_library_scan(self, force=False):
+        """Kick off a Steam/Epic library scan on a background daemon thread.
+
+        Library scanning walks configured libraries with os.walk (depth 4)
+        and used to run synchronously inside __init__ and the monitor loop,
+        stalling engine construction and game detection for seconds on large
+        libraries. One worker at a time; a request while a scan is running is
+        dropped (the running scan already publishes fresh caches).
+        """
+        with self._state_lock:
+            thread = self._library_scan_thread
+            if thread is not None and thread.is_alive():
+                return
+            thread = threading.Thread(
+                target=self._run_library_scans,
+                kwargs={"force": force},
+                name="IsolatorLibraryScan",
+                daemon=True,
+            )
+            self._library_scan_thread = thread
+        thread.start()
+
+    def _run_library_scans(self, force=False):
+        try:
+            if self.auto_detect_steam:
+                self._scan_steam_games(force=force or self._last_steam_scan == float("-inf"))
+            if self.auto_detect_epic:
+                self._scan_epic_games(force=force or self._last_epic_scan == float("-inf"))
+        finally:
+            # Background jailing waits on this so an auto-detected game can
+            # never be classified as background before the caches are warm.
+            self._library_scan_ready.set()
     def _clear_discovery_issues(self, provider):
         prefix = f"{provider}_"
         with self._state_lock:
@@ -301,6 +339,7 @@ class DiscoveryMixin:
                 )
         steam_games = set()
         seen_paths = set()
+        deadline = time.monotonic() + LIBRARY_SCAN_BUDGET_S
         for lib in library_paths:
             path_key = os.path.normcase(os.path.abspath(lib))
             if path_key in seen_paths:
@@ -310,14 +349,21 @@ class DiscoveryMixin:
                 self._record_discovery_issue("steam_library_unavailable", path=lib)
                 continue
             try:
-                self._scan_for_game_exes(lib, steam_games, max_depth=4)
+                completed = self._scan_for_game_exes(lib, steam_games, max_depth=4, deadline=deadline)
             except OSError as exc:
                 self._record_discovery_issue(
                     "steam_library_scan_failed",
                     path=lib,
                     error=type(exc).__name__,
                 )
-        self._steam_games_cache = steam_games
+                continue
+            if not completed:
+                if not self._stop_event.is_set():
+                    self._record_discovery_issue("steam_scan_budget_exceeded", path=lib)
+                break
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._steam_games_cache = steam_games
 
     @staticmethod
     def _steam_common_directory(path):
@@ -352,7 +398,12 @@ class DiscoveryMixin:
                     return False
         return True
 
-    def _scan_for_game_exes(self, root_path, out_set, max_depth=3):
+    def _scan_for_game_exes(self, root_path, out_set, max_depth=3, deadline=None):
+        """Walk one library root collecting game exe names.
+
+        Returns True when the walk completed, False when it stopped early —
+        either the wall-clock deadline passed or the engine is shutting down.
+        """
         # WHY: Pre-prune `dirs` so os.walk skips redistributable / installer
         # subtrees AND so depth-(max_depth+1) directories are never entered
         # in the first place. The previous implementation called _dirs.clear()
@@ -360,7 +411,12 @@ class DiscoveryMixin:
         def raise_walk_error(error):
             raise error
 
+        stop_event = getattr(self, "_stop_event", None)
         for current_root, dirs, files in os.walk(root_path, onerror=raise_walk_error):
+            if stop_event is not None and stop_event.is_set():
+                return False
+            if deadline is not None and time.monotonic() > deadline:
+                return False
             rel = os.path.relpath(current_root, root_path)
             depth = 0 if rel in (".", "") else rel.count(os.sep) + 1
             if depth >= max_depth:
@@ -375,6 +431,7 @@ class DiscoveryMixin:
             for f in files:
                 if self._looks_like_game_exe(f, os.path.join(current_root, f)):
                     out_set.add(f.lower())
+        return True
 
     def _is_steam_game(self, exe_path):
         if not self.auto_detect_steam or not exe_path:
@@ -460,6 +517,7 @@ class DiscoveryMixin:
         if not paths:
             self._record_discovery_issue("epic_install_not_found")
         seen_paths = set()
+        deadline = time.monotonic() + LIBRARY_SCAN_BUDGET_S
         for lib in paths:
             path_key = os.path.normcase(os.path.abspath(lib))
             if path_key in seen_paths:
@@ -469,14 +527,21 @@ class DiscoveryMixin:
                 self._record_discovery_issue("epic_library_unavailable", path=lib)
                 continue
             try:
-                self._scan_for_game_exes(lib, epic_games, max_depth=4)
+                completed = self._scan_for_game_exes(lib, epic_games, max_depth=4, deadline=deadline)
             except OSError as exc:
                 self._record_discovery_issue(
                     "epic_library_scan_failed",
                     path=lib,
                     error=type(exc).__name__,
                 )
-        self._epic_games_cache = epic_games
+                continue
+            if not completed:
+                if not self._stop_event.is_set():
+                    self._record_discovery_issue("epic_scan_budget_exceeded", path=lib)
+                break
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._epic_games_cache = epic_games
 
     def _is_epic_game(self, exe_path):
         if not self.auto_detect_epic or not exe_path:

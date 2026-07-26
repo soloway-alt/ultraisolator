@@ -146,6 +146,8 @@ class RuntimeState:
     last_epic_scan: float = float("-inf")
     steam_games_cache: set = field(default_factory=set)
     epic_games_cache: set = field(default_factory=set)
+    library_scan_ready: object = field(default_factory=threading.Event)
+    library_scan_thread: object = None
     discovery_issues: list = field(default_factory=list)
     known_non_games: set = field(default_factory=set)
     path_classification_cache: dict = field(default_factory=dict)
@@ -342,6 +344,8 @@ class EsportsIsolatorPro(
         self._last_epic_scan = state.last_epic_scan
         self._steam_games_cache = state.steam_games_cache
         self._epic_games_cache = state.epic_games_cache
+        self._library_scan_ready = state.library_scan_ready
+        self._library_scan_thread = state.library_scan_thread
         self._discovery_issues = state.discovery_issues
         self._known_non_games = state.known_non_games
         self._path_classification_cache = state.path_classification_cache
@@ -374,10 +378,16 @@ class EsportsIsolatorPro(
         self._spi_struct_longlong = scratch.spi_struct_longlong
         self._spi_struct_ptr = scratch.spi_struct_ptr
         self._register_capability_defaults()
-        if scan_game_libraries and self.auto_detect_steam:
-            self._scan_steam_games(force=True)
-        if scan_game_libraries and self.auto_detect_epic:
-            self._scan_epic_games(force=True)
+        # WHY: Library scanning walks multi-terabyte game libraries and used
+        # to block construction (and therefore CLI startup and the API
+        # bridge's engine build) for seconds. It now runs on a daemon worker;
+        # background jailing waits on _library_scan_ready so an auto-detected
+        # game can never be classified as background before the caches are
+        # warm — the same safety the old synchronous scan provided.
+        if scan_game_libraries and (self.auto_detect_steam or self.auto_detect_epic):
+            self._request_library_scan(force=True)
+        else:
+            self._library_scan_ready.set()
 
     def get_runtime_status(self):
         """Return a small read-only runtime snapshot for localhost UI bridges."""
