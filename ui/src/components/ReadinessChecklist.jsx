@@ -47,6 +47,7 @@ function checkDetail(check, t) {
   return t(`readiness.check.${check.id}.${check.status}`, check.detail, check.data || {});
 }
 
+/** @param {{gameMode: boolean, visible: boolean}} props */
 export const ReadinessChecklist = memo(function ReadinessChecklist({ gameMode, visible }) {
   const { t } = useI18n();
   const hiddenWindow = !visible && !gameMode;

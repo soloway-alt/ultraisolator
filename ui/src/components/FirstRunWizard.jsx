@@ -7,6 +7,7 @@ import { requestJson } from '../utils/api.mjs';
 
 const STEP_COUNT = 3;
 
+/** @param {{status?: import('../types.js').IsolatorStatus, connectionState?: string, snapshotKnown?: boolean}} props */
 export function FirstRunWizard({ status = {}, connectionState = 'idle', snapshotKnown = false }) {
   const { t } = useI18n();
   const { settings, ready: settingsReady, updateSettings } = useAppSettings();

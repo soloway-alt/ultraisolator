@@ -2,6 +2,7 @@
 import { isMonitoringActive } from '../utils/status.mjs';
 import { useI18n } from '../i18n.jsx';
 
+/** @param {{status: import('../types.js').IsolatorStatus | undefined}} props */
 export function StatusTag({ status }) {
   const { t } = useI18n();
   const monitoring = isMonitoringActive(status);

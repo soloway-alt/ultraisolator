@@ -72,6 +72,7 @@ function processActionStatus(process) {
   return process.status || 'tracked';
 }
 
+/** @param {{snapshot: ?{processes?: import('../types.js').ProcessRow[], process_mode?: string}}} props */
 export const ProcessTable = memo(function ProcessTable({ snapshot }) {
   const { t } = useI18n();
   const [processFilter, setProcessFilter] = useState('all');

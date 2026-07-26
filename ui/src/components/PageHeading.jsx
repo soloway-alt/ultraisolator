@@ -2,6 +2,7 @@
 
 // The heading derives its text from the PAGES entry (labelKey + fallback), so
 // a page cannot ship an untranslated hand-typed title again.
+/** @param {{page: import('../types.js').PageEntry, titleId: string, children?: import('react').ReactNode}} props */
 export function PageHeading({ page, titleId, children }) {
   const { t } = useI18n();
   return (

@@ -34,6 +34,7 @@ function capabilityIssueText(issue, t) {
   );
 }
 
+/** @param {{live: import('../types.js').LiveState, page: import('../types.js').PageEntry}} props */
 export const DashboardPage = memo(function DashboardPage({ live, page }) {
   const { t } = useI18n();
   const [actionState, setActionState] = useState({ pending: null, error: null, lastAction: null });

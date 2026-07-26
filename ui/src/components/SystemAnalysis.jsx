@@ -33,6 +33,7 @@ function checkDetail(check, t) {
   return t(`analysis.check.${check.id}.${check.status}`, check.detail, check.data || {});
 }
 
+/** @param {{gameMode: boolean, visible: boolean, engineRunning: boolean}} props */
 export const SystemAnalysis = memo(function SystemAnalysis({ gameMode, visible, engineRunning }) {
   const { t } = useI18n();
   const hiddenWindow = !visible && !gameMode;

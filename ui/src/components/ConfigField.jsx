@@ -3,6 +3,7 @@ import { useI18n } from '../i18n.jsx';
 import { fieldLabel } from '../utils/config.mjs';
 import { ToggleRow } from './ToggleRow.jsx';
 
+/** @param {{field: string, spec: import('../types.js').ConfigFieldSpec, value: *, error: string | undefined, onChange: (value: *) => void}} props */
 export function ConfigField({ field, spec, value, error, onChange }) {
   const { t } = useI18n();
   const label = t(`field.${field}`, fieldLabel(field));

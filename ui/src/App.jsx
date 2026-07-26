@@ -38,6 +38,7 @@ function AppShell() {
   const { t } = useI18n();
   // Pages see only the slices they read; notifications stay out so a
   // notification frame does not re-render the active page (they are memoized).
+  /** @type {import('./types.js').LiveState} */
   const live = useMemo(
     () => ({ connectionState, snapshot, visible }),
     [connectionState, snapshot, visible]
