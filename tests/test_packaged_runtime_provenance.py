@@ -573,7 +573,7 @@ class BackendResourceIntegrityTests(unittest.TestCase):
     def test_packaged_runtime_verifier_checks_default_python_policy(self):
         verifier = (ROOT / "ui" / "scripts" / "verify-packaged-runtime.js").read_text(encoding="utf-8")
 
-        self.assertIn("assertPackagedPythonPolicy(resourcesRoot)", verifier)
+        self.assertIn("assertPackagedPythonPolicy(resourcesRoot, options)", verifier)
         self.assertIn("assertPackagedPythonWorks(packagedPython, resourcesRoot, backendRoot)", verifier)
         self.assertIn("bundledPythonPath", verifier)
         self.assertIn("python', 'python.exe", verifier)

@@ -68,7 +68,7 @@ function assertManifestCoversBuildConfig() {
   }
 }
 
-function assertPackagedPythonPolicy(resourcesRoot) {
+function assertPackagedPythonPolicy(resourcesRoot, options = {}) {
   const command = 'C:\\Users\\attacker\\python.exe';
   let rejectedArbitraryPython = false;
   try {
@@ -95,7 +95,9 @@ function assertPackagedPythonPolicy(resourcesRoot) {
     app: { isPackaged: true },
     bundledPythonPath,
     trustedRoots: [path.dirname(bundledPythonPath)],
-    isPathWritableByStandardUsers: runtime.isPathWritableByStandardUsers
+    // Callers verifying an artifact extracted into a temp directory must
+    // bypass the ACL probe (temp is user-writable by design).
+    isPathWritableByStandardUsers: options.isPathWritableByStandardUsers || runtime.isPathWritableByStandardUsers
   });
 }
 
@@ -134,11 +136,9 @@ function assertPackagedPythonWorks(command, resourcesRoot, backendRoot) {
   runPackagedPython(command, ['-c', 'import isolator, server; print("backend-import-ok")'], backendRoot);
 }
 
-function main() {
-  assertManifestCoversBuildConfig();
-  const backendRoot = process.argv[2] ? path.resolve(process.argv[2]) : findPackagedBackendRoot();
+function verifyPackagedRuntime(backendRoot, options = {}) {
   const resourcesRoot = path.dirname(backendRoot);
-  const packagedPython = assertPackagedPythonPolicy(resourcesRoot);
+  const packagedPython = assertPackagedPythonPolicy(resourcesRoot, options);
   assertPackagedPythonWorks(packagedPython, resourcesRoot, backendRoot);
   const packagedManifest = findPackagedManifestPath(backendRoot);
   runtime.verifyBackendResourceIntegrity({
@@ -146,7 +146,20 @@ function main() {
     manifestPath: packagedManifest.manifestPath,
     manifest: packagedManifest.manifest
   });
+}
+
+function main() {
+  assertManifestCoversBuildConfig();
+  const backendRoot = process.argv[2] ? path.resolve(process.argv[2]) : findPackagedBackendRoot();
+  verifyPackagedRuntime(backendRoot);
   console.log(`packaged runtime verified: ${backendRoot}`);
 }
 
-main();
+// Importing this module (verify-installed-artifacts.js does) must not run
+// the CLI verification as a side effect; that made every consumer require a
+// packaged build on disk.
+if (require.main === module) {
+  main();
+}
+
+module.exports = { verifyPackagedRuntime };
