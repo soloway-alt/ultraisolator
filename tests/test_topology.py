@@ -149,7 +149,9 @@ class RuntimeTopologyRefreshTests(unittest.TestCase):
         isolator.games = {"cs2.exe"}
         isolator._get_processes = lambda: [(10, "cs2.exe")]
         isolator._find_game_processes = lambda processes: [10]
-        isolator._optimize_game = lambda pid: events.append(("optimize", pid))
+        isolator._optimize_game_with_state = (
+            lambda pid, name=None, classified_as_game=False: events.append(("optimize", pid)) or "applied"
+        )
         isolator._refresh_topology = lambda reason: events.append(("refresh", reason))
         isolator._run_background_jail = lambda initial, processes: events.append(("jail", initial)) or {}
         isolator._set_preferred_power_scheme = lambda: events.append(("power", None)) or setattr(isolator, "_power_plan_active", True) or True

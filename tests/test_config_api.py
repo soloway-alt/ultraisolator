@@ -7,7 +7,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from isolator.app import EsportsIsolatorPro
+from isolator.app import EsportsIsolatorPro, ParsedConfig
 from server.bridge import IsolatorBridge
 from server.config_store import DEFAULT_CONFIG, ConfigError, ConfigStore
 from server.http_api import create_handler, create_server
@@ -269,6 +269,17 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertIn("app_profiles[0].exe", fields)
         self.assertIn("app_profiles[0].priority_class", fields)
         self.assertIn("app_profiles[1]", fields)
+
+    def test_parsed_config_fallbacks_match_default_config(self):
+        # ParsedConfig.from_config's per-key fallbacks must be the schema
+        # defaults: parsing an empty config and parsing DEFAULT_CONFIG have
+        # to produce the same parsed result field-for-field.
+        owner = EsportsIsolatorPro(config_path="__no_local_config__.json", scan_game_libraries=False)
+
+        self.assertEqual(
+            ParsedConfig.from_config(owner, DEFAULT_CONFIG),
+            ParsedConfig.from_config(owner, {}),
+        )
 
     def test_engine_fails_closed_on_invalid_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:

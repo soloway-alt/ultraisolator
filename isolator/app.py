@@ -11,6 +11,7 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 
 from .base import BaseMixin
+from .config import DEFAULT_CONFIG
 from .discovery import DiscoveryMixin
 from .ifeo_power import IfeoPowerMixin
 from .recovery import RecoveryMixin
@@ -78,7 +79,7 @@ class ParsedConfig:
     @classmethod
     def _parse_app_profiles(cls, owner, config):
         profiles = {}
-        for item in config.get("app_profiles", []):
+        for item in config.get("app_profiles", DEFAULT_CONFIG["app_profiles"]):
             normalized = cls._normalize_profile(owner, item)
             if normalized:
                 exe, profile = normalized
@@ -88,29 +89,29 @@ class ParsedConfig:
     @classmethod
     def from_config(cls, owner, config):
         return cls(
-            games={owner._normalize_game_name(name) for name in config.get("games", [])},
-            auto_detect_steam=bool(config.get("auto_detect_steam_games", True)),
-            auto_detect_epic=bool(config.get("auto_detect_epic_games", True)),
-            steam_library_paths=config.get("steam_library_paths", []),
-            epic_library_paths=config.get("epic_library_paths", []),
+            games={owner._normalize_game_name(name) for name in config.get("games", DEFAULT_CONFIG["games"])},
+            auto_detect_steam=bool(config.get("auto_detect_steam_games", DEFAULT_CONFIG["auto_detect_steam_games"])),
+            auto_detect_epic=bool(config.get("auto_detect_epic_games", DEFAULT_CONFIG["auto_detect_epic_games"])),
+            steam_library_paths=config.get("steam_library_paths", DEFAULT_CONFIG["steam_library_paths"]),
+            epic_library_paths=config.get("epic_library_paths", DEFAULT_CONFIG["epic_library_paths"]),
             app_profiles=cls._parse_app_profiles(owner, config),
-            housekeeping_core_count=max(1, owner._safe_int(config.get("housekeeping_cores", 1), 1)),
-            poll_interval_idle_s=max(0.05, owner._safe_int(config.get("poll_interval_idle_ms", 1000), 1000) / 1000.0),
-            poll_interval_active_s=max(0.05, owner._safe_int(config.get("poll_interval_active_ms", 2000), 2000) / 1000.0),
-            enable_background_jailing=bool(config.get("enable_background_jailing", False)),
-            maintenance_jail_batch_size=max(1, owner._safe_int(config.get("maintenance_jail_batch_size", 4), 4)),
-            maintenance_jail_interval_s=max(5.0, owner._safe_int(config.get("maintenance_jail_interval_ms", 30000), 30000) / 1000.0),
-            maintenance_jail_batch_cooldown_s=max(1.0, owner._safe_int(config.get("maintenance_jail_batch_cooldown_ms", 5000), 5000) / 1000.0),
-            disable_timer_resolution_tweak=bool(config.get("disable_timer_resolution_tweak", False)),
-            disable_game_priority_boost=bool(config.get("disable_game_priority_boost", False)),
-            game_close_debounce_s=max(0.0, owner._safe_int(config.get("game_close_debounce_s", 3), 3)),
-            game_exit_restore_delay_s=max(0.0, float(config.get("game_exit_restore_delay_s", 10))),
-            gc_full_collect_interval_s=max(60.0, float(config.get("gc_full_collect_interval_s", 1800))),
-            maintenance_skip_after_quiet_cycles=max(0, owner._safe_int(config.get("maintenance_skip_after_quiet_cycles", 3), 3)),
-            event_backend=str(config.get("event_backend", "poll")).lower(),
-            allow_mmcss_injection=bool(config.get("allow_mmcss_injection", False)),
-            disable_power_scheme_switch=bool(config.get("disable_power_scheme_switch", False)),
-            anti_cheat_mode=str(config.get("anti_cheat_mode", "aggressive")).lower(),
+            housekeeping_core_count=max(1, owner._safe_int(config.get("housekeeping_cores", DEFAULT_CONFIG["housekeeping_cores"]), DEFAULT_CONFIG["housekeeping_cores"])),
+            poll_interval_idle_s=max(0.05, owner._safe_int(config.get("poll_interval_idle_ms", DEFAULT_CONFIG["poll_interval_idle_ms"]), DEFAULT_CONFIG["poll_interval_idle_ms"]) / 1000.0),
+            poll_interval_active_s=max(0.05, owner._safe_int(config.get("poll_interval_active_ms", DEFAULT_CONFIG["poll_interval_active_ms"]), DEFAULT_CONFIG["poll_interval_active_ms"]) / 1000.0),
+            enable_background_jailing=bool(config.get("enable_background_jailing", DEFAULT_CONFIG["enable_background_jailing"])),
+            maintenance_jail_batch_size=max(1, owner._safe_int(config.get("maintenance_jail_batch_size", DEFAULT_CONFIG["maintenance_jail_batch_size"]), DEFAULT_CONFIG["maintenance_jail_batch_size"])),
+            maintenance_jail_interval_s=max(5.0, owner._safe_int(config.get("maintenance_jail_interval_ms", DEFAULT_CONFIG["maintenance_jail_interval_ms"]), DEFAULT_CONFIG["maintenance_jail_interval_ms"]) / 1000.0),
+            maintenance_jail_batch_cooldown_s=max(1.0, owner._safe_int(config.get("maintenance_jail_batch_cooldown_ms", DEFAULT_CONFIG["maintenance_jail_batch_cooldown_ms"]), DEFAULT_CONFIG["maintenance_jail_batch_cooldown_ms"]) / 1000.0),
+            disable_timer_resolution_tweak=bool(config.get("disable_timer_resolution_tweak", DEFAULT_CONFIG["disable_timer_resolution_tweak"])),
+            disable_game_priority_boost=bool(config.get("disable_game_priority_boost", DEFAULT_CONFIG["disable_game_priority_boost"])),
+            game_close_debounce_s=max(0.0, owner._safe_int(config.get("game_close_debounce_s", DEFAULT_CONFIG["game_close_debounce_s"]), DEFAULT_CONFIG["game_close_debounce_s"])),
+            game_exit_restore_delay_s=max(0.0, float(config.get("game_exit_restore_delay_s", DEFAULT_CONFIG["game_exit_restore_delay_s"]))),
+            gc_full_collect_interval_s=max(60.0, float(config.get("gc_full_collect_interval_s", DEFAULT_CONFIG["gc_full_collect_interval_s"]))),
+            maintenance_skip_after_quiet_cycles=max(0, owner._safe_int(config.get("maintenance_skip_after_quiet_cycles", DEFAULT_CONFIG["maintenance_skip_after_quiet_cycles"]), DEFAULT_CONFIG["maintenance_skip_after_quiet_cycles"])),
+            event_backend=str(config.get("event_backend", DEFAULT_CONFIG["event_backend"])).lower(),
+            allow_mmcss_injection=bool(config.get("allow_mmcss_injection", DEFAULT_CONFIG["allow_mmcss_injection"])),
+            disable_power_scheme_switch=bool(config.get("disable_power_scheme_switch", DEFAULT_CONFIG["disable_power_scheme_switch"])),
+            anti_cheat_mode=str(config.get("anti_cheat_mode", DEFAULT_CONFIG["anti_cheat_mode"])).lower(),
         )
 
 

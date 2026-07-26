@@ -5,6 +5,7 @@ import os
 import re
 import time
 
+from .config import ConfigError, ConfigStore, normalize_game_name
 from .winapi import is_process_elevated, kernel32
 
 _CAPABILITY_METADATA = {
@@ -84,7 +85,6 @@ class BaseMixin:
             self._log_file_path = None
             self._log_use_timestamp = False
             return
-        from server.config_store import ConfigStore
         validated = ConfigStore(getattr(self, "config_path", "config.json")).validate({"log_file": str(path)}, partial=True)
         self._log_file_path = str(validated["log_file"])
         self._log_file_handle = open(self._log_file_path, "a", encoding="utf-8", buffering=1)
@@ -172,7 +172,6 @@ class BaseMixin:
         return is_process_elevated()
 
     def _load_config(self):
-        from server.config_store import ConfigError, ConfigStore
         store = ConfigStore(self.config_path)
         try:
             return store.read()["config"]
@@ -190,24 +189,9 @@ class BaseMixin:
         return os.path.basename(str(name)).strip().lower()
 
     def _normalize_game_name(self, name):
-        # WHY: Game names from user config should match Windows process names,
-        # which always end with .exe for user-mode executables. Without this,
-        # a config entry of "cs2" silently never matches the actual "cs2.exe"
-        # process — a footgun. We add .exe ONLY when there is no extension
-        # at all (no dot), so config entries that already include the extension
-        # are unchanged.
-        n = self._normalize_name(name)
-        # WHY (item 4): Canonicalize trailing dots / odd forms so denylist and
-        # game-name comparisons cannot be bypassed. Windows ignores trailing
-        # dots and whitespace on a filename, so "lsass.exe." and "lsass.exe "
-        # both launch lsass.exe — strip them before comparison. Collapse a
-        # doubled ".exe.exe" too. Only append ".exe" when there is no extension.
-        n = n.rstrip(". \t")
-        while n.endswith(".exe.exe"):
-            n = n[:-4]
-        if n and "." not in n:
-            n += ".exe"
-        return n
+        # Canonicalization guards the IFEO denylist, so the logic lives once:
+        # isolator.config.normalize_game_name (see the WHY comments there).
+        return normalize_game_name(name)
 
     @staticmethod
     def _safe_int(value, default):

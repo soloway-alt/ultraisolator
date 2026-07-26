@@ -18,7 +18,7 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["server"]
+files = ["server", "isolator/config.py"]
 # The engine package is untyped and Windows-only; check the server layer
 # without following into isolator/ until annotations land there.
 follow_imports = "silent"

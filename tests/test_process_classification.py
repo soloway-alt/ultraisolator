@@ -100,7 +100,7 @@ class ProcessClassificationTests(unittest.TestCase):
             with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=0):
                 with patch("isolator.tuning.kernel32.SetProcessPriorityBoost", return_value=1):
                     with patch("isolator.tuning.kernel32.CloseHandle"):
-                        isolator._optimize_game(1234)
+                        isolator._optimize_game_with_state(1234)
 
             self.assertEqual([], ifeo_calls, "IFEO must not be applied to auto-detected games")
         finally:
@@ -125,7 +125,7 @@ class ProcessClassificationTests(unittest.TestCase):
             with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=0):
                 with patch("isolator.tuning.kernel32.SetProcessPriorityBoost", return_value=1):
                     with patch("isolator.tuning.kernel32.CloseHandle"):
-                        isolator._optimize_game(1234)
+                        isolator._optimize_game_with_state(1234)
 
             self.assertEqual(["cs2.exe"], ifeo_calls)
         finally:
@@ -165,7 +165,7 @@ class ProcessClassificationTests(unittest.TestCase):
         with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=0):
             with patch("isolator.tuning.kernel32.SetProcessPriorityBoost", return_value=1):
                 with patch("isolator.tuning.kernel32.CloseHandle"):
-                    isolator._optimize_game(1234)
+                    isolator._optimize_game_with_state(1234)
 
         self.assertEqual(["cs2.exe"], fallback_calls)
 
@@ -328,9 +328,9 @@ class ProcessClassificationTests(unittest.TestCase):
             with patch("isolator.tuning.kernel32.SetPriorityClass", side_effect=lambda _handle, priority: priorities.append(priority) or 1):
                 with patch("isolator.tuning.kernel32.SetProcessPriorityBoost", return_value=1):
                     with patch("isolator.tuning.kernel32.CloseHandle"):
-                        result = isolator._optimize_game(1234)
+                        result = isolator._optimize_game_with_state(1234)
 
-            self.assertTrue(result)
+            self.assertEqual("applied", result)
             self.assertEqual([ABOVE_NORMAL_PRIORITY_CLASS], priorities)
         finally:
             os.remove(config_path)
@@ -441,9 +441,9 @@ class ProcessClassificationTests(unittest.TestCase):
         with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=1) as set_prio:
             with patch("isolator.tuning.kernel32.SetProcessPriorityBoost", return_value=1):
                 with patch("isolator.tuning.kernel32.CloseHandle"):
-                    result = isolator._optimize_game(500)
+                    result = isolator._optimize_game_with_state(500)
 
-        self.assertFalse(result)
+        self.assertEqual("failed", result)
         set_prio.assert_not_called()
 
     def test_jail_process_proceeds_when_create_time_unknown(self):
@@ -612,9 +612,9 @@ class ProcessClassificationTests(unittest.TestCase):
         calls = []
         isolator._remember_process_state = lambda *args, **kwargs: calls.append(args)
 
-        result = isolator._optimize_game(12345)
+        result = isolator._optimize_game_with_state(12345)
 
-        self.assertFalse(result)
+        self.assertNotEqual("applied", result)
         self.assertEqual([], calls)
         self.assertTrue(isolator._detect_protected_title("valorant.exe"))
 

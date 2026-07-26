@@ -180,6 +180,27 @@ class FakeEngine:
 
 
 class BridgeLifecycleTests(unittest.TestCase):
+    def test_stopped_status_keys_match_engine_runtime_status(self):
+        engine = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        engine_status = engine.get_runtime_status()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = IsolatorBridge(
+                config_path=str(Path(tmpdir) / "config.json"),
+                engine_factory=lambda *_args: FakeEngine(),
+                admin_check=lambda: True,
+            )
+            stopped = bridge._stopped_status()
+
+        # "config" is a deliberate bridge-only extra: the stopped UI still
+        # needs the persisted toggles even though no engine can report them.
+        # Every other key must stay in lockstep with the engine schema.
+        self.assertEqual(set(engine_status), set(stopped) - {"config"})
+        self.assertEqual(set(engine_status["api"]), set(stopped["api"]))
+
     def test_stopped_status_keeps_the_complete_runtime_schema(self):
         bridge = IsolatorBridge(admin_check=lambda: True)
 

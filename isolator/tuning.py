@@ -3,6 +3,7 @@
 import ctypes
 from ctypes import wintypes
 
+from .outcomes import JailOutcome, TuningState
 from .winapi import (
     ABOVE_NORMAL_PRIORITY_CLASS,
     BELOW_NORMAL_PRIORITY_CLASS,
@@ -446,10 +447,16 @@ class TuningMixin:
             self._remove_jail_states(deferred_jail_removals)
 
     def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0):
+        # Public contract (pinned by tests, _isolate_background, and the
+        # foreground-transition path): the impl's JailOutcome maps to a
+        # legacy tri-state:
+        #   JailOutcome.JAILED  → True  (jailed successfully)
+        #   JailOutcome.DENIED  → None  (OpenProcess / priority write denied)
+        #   JailOutcome.SKIPPED → False (caller-side gate skip)
         if not self._begin_process_mutation():
             return False
         try:
-            return self._jail_process_impl(
+            outcome = self._jail_process_impl(
                 pid,
                 name=name,
                 force=force,
@@ -458,26 +465,31 @@ class TuningMixin:
             )
         finally:
             self._end_process_mutation()
+        if outcome is JailOutcome.JAILED:
+            return True
+        if outcome is JailOutcome.DENIED:
+            return None
+        return False
 
     def _jail_process_impl(self, pid, name=None, force=False, record_state=True, expected_create_time=0):
         pid = int(pid)
         if pid in (0, 4, self._self_pid, self._parent_pid):
-            return False
+            return JailOutcome.SKIPPED
 
         normalized_name = self._normalize_name(name) or self._get_process_name(pid)
         if not normalized_name:
-            return False
+            return JailOutcome.SKIPPED
         if self._is_protected_process_name(normalized_name) or self._profile_never_jail(normalized_name):
-            return False
+            return JailOutcome.SKIPPED
         if self._is_game_name(normalized_name) and not self._profile_always_jail(normalized_name):
-            return False
+            return JailOutcome.SKIPPED
 
         handle = self._open_process(pid, PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION | PROCESS_SET_LIMITED_INFORMATION, quiet=not force)
         if not handle:
             # WHY: OpenProcess failed (typically access denied for protected
-            # / SYSTEM-owned processes). Return None to distinguish this
-            # "denied" outcome from the False "gated" outcomes above.
-            return None
+            # / SYSTEM-owned processes). DENIED distinguishes this outcome
+            # from the SKIPPED "gated" outcomes above.
+            return JailOutcome.DENIED
 
         try:
             # WHY: PID-reuse guard, symmetric with _restore_process. The handle
@@ -498,7 +510,7 @@ class TuningMixin:
                     f"[INFO] Skipping jail for pid={pid} ({normalized_name}): PID reuse "
                     f"(expected_ct={expected_create_time}, current_ct={actual_create_time}).",
                 )
-                return False
+                return JailOutcome.SKIPPED
             # WHY: Snapshot the original state INSIDE the try/finally so a
             # failure inside _remember_process_state (e.g., ctypes alloc
             # error during _query_process_state) cannot leak the handle.
@@ -516,7 +528,7 @@ class TuningMixin:
                     f"[INFO] Access denied setting idle priority for pid={pid} ({normalized_name}).",
                 )
                 self._restore_process(pid)
-                return None
+                return JailOutcome.DENIED
             try:
                 self._set_process_page_priority(handle, PAGE_PRIORITY_MINIMUM)
             except OSError:
@@ -527,14 +539,14 @@ class TuningMixin:
                 pass
             if record_state:
                 self._record_jail_state(pid)
-            return True
+            return JailOutcome.JAILED
         except OSError as exc:
             if getattr(exc, 'winerror', None) != 5 and "Access is denied" not in str(exc) and "Отказано в доступе" not in str(exc):
                 self._log_once(("jail", pid), f"[WARN] Failed to jail pid={pid} ({normalized_name}): {exc}")
-            # WHY: Return None to signal "denied" to callers (vs. False which
-            # means "skipped at the gate"). _isolate_background uses this
-            # distinction to count true failures separately from gates.
-            return None
+            # WHY: DENIED signals a true failure to callers (vs. SKIPPED,
+            # which means "skipped at the gate"). _isolate_background uses
+            # this distinction to count failures separately from gates.
+            return JailOutcome.DENIED
         finally:
             kernel32.CloseHandle(handle)
 
@@ -774,12 +786,9 @@ class TuningMixin:
     def _find_game_processes(self, processes=None):
         return list(self._find_game_process_entries(processes).keys())
 
-    def _optimize_game(self, pid, name=None):
-        return self._optimize_game_with_state(pid, name) == "applied"
-
     def _optimize_game_with_state(self, pid, name=None, classified_as_game=False):
         if not self._begin_process_mutation():
-            return "skipped"
+            return TuningState.SKIPPED
         try:
             return self._optimize_game_impl(
                 pid,
@@ -794,15 +803,15 @@ class TuningMixin:
         snapshot_name_supplied = bool(name)
         name = self._normalize_name(name) if name else self._get_process_name(pid)
         if not classified_as_game and not self._is_game_name_normalized(name):
-            return "failed"
+            return TuningState.FAILED
         protected_title = self._detect_protected_title(name)
         if protected_title and self.anti_cheat_mode == "conservative":
             self._log_once(("protected_game_skip", name), f"[INFO] Conservative anti-cheat policy skipped direct game tuning for {name}.")
-            return "skipped"
+            return TuningState.SKIPPED
 
         handle = self._open_process(pid, PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION | PROCESS_SET_LIMITED_INFORMATION, quiet=True)
         if not handle:
-            return "blocked"
+            return TuningState.BLOCKED
 
         try:
             if not self._pid_identity_matches_snapshot(
@@ -812,7 +821,7 @@ class TuningMixin:
                 "optimize_game",
                 trust_snapshot_name=snapshot_name_supplied,
             ):
-                return "failed"
+                return TuningState.FAILED
             # WHY: Snapshot inside the try/finally so a failure during
             # state capture cannot leak the open handle.
             self._remember_process_state(pid, handle, name, source="optimize_game")
@@ -843,10 +852,10 @@ class TuningMixin:
                 self._log_once(("io_prio", pid), f"[WARN] IoPriority failed: {e}")
 
             self._log(f"[GAME] Optimized running game: {name} (pid={pid})")
-            return "applied"
+            return TuningState.APPLIED
         except OSError as exc:
             self._log_once(("optimize_game", pid), f"[WARN] Failed to optimize game pid={pid}: {exc}")
-            return "failed"
+            return TuningState.FAILED
         finally:
             kernel32.CloseHandle(handle)
 

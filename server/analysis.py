@@ -1,5 +1,7 @@
 """Read-only system analysis and optimization score."""
 
+from .capability import capability_warnings as _capability_warnings
+
 
 def _append_category(categories, label):
     if label not in categories:
@@ -14,26 +16,6 @@ def _grade_for_score(score):
     if score >= 60:
         return "fair"
     return "weak"
-
-
-def _capability_warnings(status):
-    structured = status.get("capability_issues")
-    if isinstance(structured, (list, tuple)) and structured:
-        return [
-            issue
-            for issue in structured
-            if isinstance(issue, dict)
-            and str(issue.get("severity", "")).lower() in {"warning", "error"}
-        ]
-    return [
-        {
-            "code": "legacy_capability_note",
-            "severity": "warning",
-            "message": str(note),
-            "data": {},
-        }
-        for note in status.get("capability_notes", []) or []
-    ]
 
 
 def _check(check_id, label, category, max_score, passed, detail_ok, detail_bad, bad_status="warning", partial_score=0):

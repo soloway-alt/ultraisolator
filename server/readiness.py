@@ -1,5 +1,7 @@
 """Read-only competitive gaming readiness checklist."""
 
+from .capability import capability_warnings as _capability_warnings
+
 
 def _check(check_id, label, status, detail, recommendation=None):
     return {
@@ -9,26 +11,6 @@ def _check(check_id, label, status, detail, recommendation=None):
         "detail": detail,
         "recommendation": recommendation,
     }
-
-
-def _capability_warnings(status):
-    structured = status.get("capability_issues")
-    if isinstance(structured, (list, tuple)) and structured:
-        return [
-            issue
-            for issue in structured
-            if isinstance(issue, dict)
-            and str(issue.get("severity", "")).lower() in {"warning", "error"}
-        ]
-    return [
-        {
-            "code": "legacy_capability_note",
-            "severity": "warning",
-            "message": str(note),
-            "data": {},
-        }
-        for note in status.get("capability_notes", []) or []
-    ]
 
 
 def build_readiness_payload(status, topology, config, cache_hit=False, generated_at=None, cache_ttl_s=300):

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from isolator.app import EsportsIsolatorPro
+from isolator.outcomes import TuningState
 from server.readiness import build_readiness_payload
 
 
@@ -66,6 +67,14 @@ class GameObservationStatusTests(unittest.TestCase):
         self.assertEqual(
             "skipped",
             isolator._optimize_game_with_state(4242, "valorant.exe"),
+        )
+
+    def test_tuning_state_enum_serializes_identically_to_raw_string(self):
+        # TuningState is a str subclass precisely so the API wire format is
+        # byte-identical to the raw strings it replaced.
+        self.assertEqual(
+            json.dumps({"pid": 4242, "name": "cs2.exe", "tuning_state": "applied"}),
+            json.dumps({"pid": 4242, "name": "cs2.exe", "tuning_state": TuningState.APPLIED}),
         )
 
     def test_one_missed_poll_retains_observed_game_until_debounce(self):
