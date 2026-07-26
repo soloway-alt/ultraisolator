@@ -8,6 +8,7 @@ from isolator.app import EsportsIsolatorPro
 from isolator.winapi import is_process_elevated
 
 from .analysis import build_analysis_payload
+from .capability import _TtlCache
 from .config_store import ConfigStore
 from .log_store import read_log_payload
 from .msi import build_msi_payload, read_msi_devices
@@ -43,12 +44,8 @@ class IsolatorBridge:
         self._live_clients = 0
         self._notification_state = None
         self._notification_sequence = 0
-        self._readiness_cache = None
-        self._readiness_cache_monotonic = 0.0
-        self._readiness_cache_ttl_s = 300
-        self._msi_cache = None
-        self._msi_cache_monotonic = 0.0
-        self._msi_cache_ttl_s = 300
+        self._readiness_cache = _TtlCache(ttl_s=300)
+        self._msi_cache = _TtlCache(ttl_s=300)
         self._status_config = self._read_status_config()
 
     def _read_status_config(self):
@@ -291,10 +288,8 @@ class IsolatorBridge:
         # Readiness embeds config-derived checks; a config change must not
         # keep serving the pre-change verdict for the rest of the cache TTL.
         with self._lock:
-            self._readiness_cache = None
-            self._readiness_cache_monotonic = 0.0
-            self._msi_cache = None
-            self._msi_cache_monotonic = 0.0
+            self._readiness_cache.clear()
+            self._msi_cache.clear()
 
     def topology(self, refresh=False):
         with self._lock:
@@ -351,14 +346,12 @@ class IsolatorBridge:
                 {},
                 cache_hit=False,
                 generated_at=time.time(),
-                cache_ttl_s=self._readiness_cache_ttl_s,
+                cache_ttl_s=self._readiness_cache.ttl_s,
             )
 
-        now = time.monotonic()
         with self._lock:
-            cache = self._readiness_cache
-            cache_age = now - self._readiness_cache_monotonic
-        if not refresh and cache is not None and cache_age < self._readiness_cache_ttl_s:
+            cache = self._readiness_cache.get(refresh=refresh)
+        if cache is not None:
             cached = dict(cache)
             cached["cache"] = dict(cached.get("cache", {}), hit=True)
             return cached
@@ -371,11 +364,10 @@ class IsolatorBridge:
             config,
             cache_hit=False,
             generated_at=time.time(),
-            cache_ttl_s=self._readiness_cache_ttl_s,
+            cache_ttl_s=self._readiness_cache.ttl_s,
         )
         with self._lock:
-            self._readiness_cache = payload
-            self._readiness_cache_monotonic = now
+            self._readiness_cache.set(payload)
         return payload
 
     def logs(self, limit=500):
@@ -383,40 +375,35 @@ class IsolatorBridge:
         log_file = config.get("log_file", "")
         return read_log_payload(log_file, limit=limit)
 
+    def _paused_msi_payload(self, status):
+        return build_msi_payload(
+            status,
+            [],
+            available=False,
+            reason="paused_in_game_mode",
+            cache_hit=False,
+            generated_at=time.time(),
+            cache_ttl_s=self._msi_cache.ttl_s,
+        )
+
     def msi_devices(self, refresh=False):
         status = self.status()
         if status.get("game_mode"):
-            return build_msi_payload(
-                status,
-                [],
-                available=False,
-                reason="paused_in_game_mode",
-                cache_hit=False,
-                generated_at=time.time(),
-                cache_ttl_s=self._msi_cache_ttl_s,
-            )
+            return self._paused_msi_payload(status)
 
-        now = time.monotonic()
         with self._lock:
-            cache = self._msi_cache
-            cache_age = now - self._msi_cache_monotonic
-        if not refresh and cache is not None and cache_age < self._msi_cache_ttl_s:
+            cache = self._msi_cache.get(refresh=refresh)
+        if cache is not None:
             cached = dict(cache)
             cached["cache"] = dict(cached.get("cache", {}), hit=True)
             return cached
 
         available, reason, devices = read_msi_devices()
+        # Registry reads take long enough that a game can start mid-call;
+        # re-check so a fresh device list is never built during game mode.
         status = self.status()
         if status.get("game_mode"):
-            return build_msi_payload(
-                status,
-                [],
-                available=False,
-                reason="paused_in_game_mode",
-                cache_hit=False,
-                generated_at=time.time(),
-                cache_ttl_s=self._msi_cache_ttl_s,
-            )
+            return self._paused_msi_payload(status)
         payload = build_msi_payload(
             status,
             devices,
@@ -424,11 +411,10 @@ class IsolatorBridge:
             reason=reason,
             cache_hit=False,
             generated_at=time.time(),
-            cache_ttl_s=self._msi_cache_ttl_s,
+            cache_ttl_s=self._msi_cache.ttl_s,
         )
         with self._lock:
-            self._msi_cache = payload
-            self._msi_cache_monotonic = now
+            self._msi_cache.set(payload)
         return payload
 
     def start(self):

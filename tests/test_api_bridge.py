@@ -13,6 +13,7 @@ from isolator.app import EsportsIsolatorPro
 from server.__main__ import _parent_heartbeat_loop
 from server.__main__ import main as server_main
 from server.bridge import AdministratorRequired, BridgeConflict, IsolatorBridge
+from server.capability import _TtlCache
 from server.http_api import create_handler, create_server
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,6 +178,28 @@ class FakeEngine:
             "processes": [],
             "process_count": 0,
         }
+
+
+class TtlCacheTests(unittest.TestCase):
+    def test_serves_fresh_values_expires_on_ttl_and_bypasses_on_refresh(self):
+        clock = {"now": 0.0}
+        cache = _TtlCache(ttl_s=300, monotonic=lambda: clock["now"])
+
+        self.assertIsNone(cache.get())
+        cache.set({"ok": True})
+        clock["now"] = 299.0
+        self.assertEqual({"ok": True}, cache.get())
+        self.assertIsNone(cache.get(refresh=True))
+        clock["now"] = 300.0
+        self.assertIsNone(cache.get())
+
+    def test_clear_empties_the_cached_value(self):
+        cache = _TtlCache(ttl_s=300, monotonic=lambda: 0.0)
+        cache.set({"ok": True})
+
+        cache.clear()
+
+        self.assertIsNone(cache.get())
 
 
 class BridgeLifecycleTests(unittest.TestCase):
