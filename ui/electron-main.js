@@ -5,7 +5,6 @@ const fs = require('fs');
 const http = require('http');
 const net = require('net');
 const path = require('path');
-const { pathToFileURL } = require('url');
 const {
   appendBackendStartupLog,
   assertProcessElevated,
@@ -70,6 +69,15 @@ const LIVE_RECONNECT_DELAY_MS = 1500;
 // Request-shape validation for the backend proxy trust boundary, including
 // the shared operation allowlist; kept Electron-free for unit testing.
 const { isPlainObject, proxyError, resolveBackendOperation } = require('./main/backend-proxy');
+// Renderer URL resolution, trust checks, and diagnostic pages; the resolver
+// caches the target so per-IPC trust checks stop stat-ing the dist build.
+const { createRendererResolver, rendererFailureUrl } = require('./main/renderer-window');
+const rendererResolver = createRendererResolver({
+  isPackaged: app.isPackaged,
+  distIndexPath: path.join(__dirname, 'dist', 'index.html'),
+  devRendererUrl: !app.isPackaged && process.env.EII_RENDERER_URL ? process.env.EII_RENDERER_URL : null,
+  getBackendStartupError: () => backendStartupError
+});
 
 function appSettingsPath() {
   return path.join(app.getPath('userData'), APP_SETTINGS_FILE);
@@ -288,43 +296,6 @@ function getJson(urlPath) {
   return requestBackendJson(urlPath, { method: 'GET' });
 }
 
-function isLoopbackHostname(hostname) {
-  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]';
-}
-
-function isTrustedRendererUrl(rawUrl) {
-  if (!rawUrl) {
-    return false;
-  }
-  let actual;
-  try {
-    actual = new URL(rawUrl);
-  } catch (_error) {
-    return false;
-  }
-
-  const expected = rendererUrl();
-  if (expected.type === 'file') {
-    const expectedFileUrl = new URL(pathToFileURL(expected.target).toString());
-    return actual.protocol === 'file:' && actual.pathname === expectedFileUrl.pathname;
-  }
-
-  if (!app.isPackaged && expected.type === 'url') {
-    let expectedUrl;
-    try {
-      expectedUrl = new URL(expected.target);
-    } catch (_error) {
-      return false;
-    }
-    if (!['http:', 'https:'].includes(expectedUrl.protocol) || !isLoopbackHostname(expectedUrl.hostname)) {
-      return false;
-    }
-    return actual.origin === expectedUrl.origin;
-  }
-
-  return false;
-}
-
 function assertTrustedIpcSender(event) {
   if (!mainWindow || !event || event.sender !== mainWindow.webContents) {
     throw proxyError('forbidden_sender', 'IPC request did not originate from the main dashboard window.');
@@ -333,7 +304,7 @@ function assertTrustedIpcSender(event) {
     throw proxyError('forbidden_frame', 'IPC backend proxy is restricted to the dashboard main frame.');
   }
   const senderUrl = event.senderFrame.url || event.sender.getURL();
-  if (!isTrustedRendererUrl(senderUrl)) {
+  if (!rendererResolver.isTrustedRendererUrl(senderUrl)) {
     throw proxyError('forbidden_renderer_url', 'IPC backend proxy is restricted to the trusted dashboard URL.');
   }
 }
@@ -559,68 +530,8 @@ async function startBackend() {
 
   await waitForBackendReady(backendUrl);
   backendStartupError = null;
+  rendererResolver.invalidate();
   return backendUrl;
-}
-
-function rendererUrl() {
-  if (!app.isPackaged && process.env.EII_RENDERER_URL) {
-    return { type: 'url', target: process.env.EII_RENDERER_URL };
-  }
-  const startupMessage = backendStartupError
-    ? `Startup safety check failed: ${escapeHtml(backendStartupError)}`
-    : 'API bridge is running. React dashboard build is not installed yet.';
-  if (backendStartupError) {
-    const diagnostic = [
-      '<!doctype html><html><head><meta charset="utf-8">',
-      '<meta name="viewport" content="width=device-width,initial-scale=1">',
-      '<title>UltraIsolator</title>',
-      '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
-      '.shell{display:grid;place-items:center;min-height:100vh;padding:32px}.mark{color:#FF4757;font:700 20px Consolas,monospace;letter-spacing:.08em}',
-      '.sub{margin-top:10px;color:#E8E8EC;font-size:13px;max-width:720px;line-height:1.5}</style></head>',
-      '<body><main class="shell"><div><div class="mark">ESPORTS ISOLATOR PRO</div>',
-      `<div class="sub">${startupMessage}</div></div></main></body></html>`
-    ].join('');
-    return { type: 'url', target: `data:text/html;charset=utf-8,${encodeURIComponent(diagnostic)}` };
-  }
-  const distIndex = path.join(__dirname, 'dist', 'index.html');
-  if (fs.existsSync(distIndex)) {
-    return { type: 'file', target: distIndex };
-  }
-  const fallback = [
-    '<!doctype html><html><head><meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<title>UltraIsolator</title>',
-    '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
-    '.shell{display:grid;place-items:center;min-height:100vh}.mark{color:#00D4AA;font:700 20px Consolas,monospace;letter-spacing:.08em}',
-    '.sub{margin-top:10px;color:#AAAAAA;font-size:13px}</style></head>',
-    '<body><main class="shell"><div><div class="mark">ESPORTS ISOLATOR PRO</div>',
-    `<div class="sub">${startupMessage}</div></div></main></body></html>`
-  ].join('');
-  return { type: 'url', target: `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}` };
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function rendererFailureUrl(detail) {
-  const safeDetail = String(detail || 'Renderer failed to mount. Rebuild the dashboard and reopen the app.')
-    .replace(/[<>&]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[char]));
-  const fallback = [
-    '<!doctype html><html><head><meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<title>UltraIsolator</title>',
-    '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
-    '.shell{display:grid;place-items:center;min-height:100vh}.mark{color:#FF4757;font:700 20px Consolas,monospace;letter-spacing:.08em}',
-    '.sub{margin-top:10px;color:#AAAAAA;font-size:13px;max-width:560px;line-height:1.5}</style></head>',
-    `<body><main class="shell"><div><div class="mark">RENDERER LOAD FAILED</div><div class="sub">${safeDetail}</div></div></main></body></html>`
-  ].join('');
-  return `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}`;
 }
 
 function waitForRendererMount(timeoutMs = 5000) {
@@ -656,7 +567,7 @@ function ensureRendererLoaded() {
   if (rendererLoadPromise) {
     return rendererLoadPromise;
   }
-  const target = rendererUrl();
+  const target = rendererResolver.rendererUrl();
   rendererLoadPromise = (target.type === 'file'
     ? mainWindow.loadFile(target.target, { hash: 'dashboard' })
     : mainWindow.loadURL(target.target))
@@ -967,7 +878,7 @@ function createWindow() {
     }
   });
   mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
-    const target = rendererUrl();
+    const target = rendererResolver.rendererUrl();
     if (target.type === 'file') {
       event.preventDefault();
       return;
@@ -1148,6 +1059,7 @@ function retryBootstrap() {
 
 function handleBootstrapFailure(error) {
   backendStartupError = error instanceof Error ? error.message : String(error);
+  rendererResolver.invalidate();
   console.error(`[bootstrap] startup failed: ${backendStartupError}`);
   appendBackendStartupLog(app, backendStartupError);
   // Ensure no orphaned backend is left holding the port.

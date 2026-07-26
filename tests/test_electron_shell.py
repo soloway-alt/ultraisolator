@@ -97,8 +97,12 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("let backendStartupError = null", main)
         self.assertIn("backendStartupError = error instanceof Error ? error.message : String(error)", main)
         self.assertIn("appendBackendStartupLog(app, backendStartupError)", main)
-        self.assertIn("backendStartupError", main[main.index("function rendererUrl"):])
-        self.assertIn("Startup safety check failed", main)
+        self.assertIn("getBackendStartupError: () => backendStartupError", main)
+        # The renderer target is cached; every startup-error transition must
+        # invalidate it so the diagnostic page and trust checks stay in sync.
+        self.assertIn("rendererResolver.invalidate()", main)
+        window = (UI / "main" / "renderer-window.js").read_text(encoding="utf-8")
+        self.assertIn("Startup safety check failed", window)
 
     def test_preload_exposes_minimal_ipc_api(self):
         preload = (UI / "electron-preload.js").read_text(encoding="utf-8")
