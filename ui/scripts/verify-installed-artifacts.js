@@ -71,7 +71,7 @@ function verifyReleaseArtifacts(options = {}) {
 
   const checksums = new Map();
   for (const line of lines) {
-    const match = line.match(/^([a-f0-9]{64})  (.+)$/);
+    const match = line.match(/^([a-f0-9]{64}) {2}(.+)$/);
     if (!match) {
       throw new Error(`${checksumManifestName} contains an invalid checksum line.`);
     }
