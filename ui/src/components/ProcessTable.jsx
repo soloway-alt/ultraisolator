@@ -3,31 +3,8 @@ import { Tile } from '@carbon/react';
 import { PRIORITY_CLASS_LABELS, PROCESS_FILTERS } from '../constants/processes.mjs';
 import { useI18n } from '../i18n.jsx';
 import { formatCpuSets, formatPriorityClass } from '../utils/format.mjs';
+import { processMatchesFilter, processMatchesQuery } from '../utils/processFilters.mjs';
 import { ProcessStatusBadge } from './ProcessStatusBadge.jsx';
-
-function processMatchesFilter(process, filter) {
-  if (filter === 'all') {
-    return true;
-  }
-  if (filter === 'game') {
-    return Boolean(process.game)
-      || process.status === 'game'
-      || process.source === 'observed_game'
-      || Boolean(process.tuning_state);
-  }
-  if (filter === 'protected') {
-    return Boolean(process.protected) || process.status === 'protected';
-  }
-  return process.status === filter;
-}
-
-function processMatchesQuery(process, query) {
-  if (!query) {
-    return true;
-  }
-  const haystack = `${process.pid || ''} ${process.name || ''} ${process.source || ''} ${process.status || ''}`.toLowerCase();
-  return haystack.includes(query);
-}
 
 function formatPriorityLabel(priorityClass, t) {
   if (typeof priorityClass !== 'number') {
