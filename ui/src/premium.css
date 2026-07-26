@@ -20,6 +20,12 @@
   --eii-alert: #f45d6d;
   --eii-icon: #b7c2ce;
   --eii-icon-brand: #56a0ff;
+  /* CPU partition series — validated as a categorical set (CVD + contrast)
+     against the dark surface; "unassigned" is a neutral, not a series. */
+  --eii-partition-game: #3987e5;
+  --eii-partition-background: #c98500;
+  --eii-partition-housekeeping: #199e70;
+  --eii-partition-unassigned: #8a9aad;
   --eii-text: #f5f8fc;
   --eii-text-secondary: #b7c2ce;
   --eii-muted: #8a9aad;
@@ -125,7 +131,8 @@ a:focus-visible,
 
 .stream-dot.connected {
   background: var(--eii-success);
-  box-shadow: none;
+  /* The one glowing signal in the header: the live stream is healthy. */
+  box-shadow: 0 0 8px rgba(53, 211, 146, 0.7);
 }
 
 .stream-dot.error {
@@ -824,6 +831,12 @@ a:focus-visible,
 
 .status-badge-dot {
   box-shadow: none;
+}
+
+/* The glow is reserved for the one state the player must spot first. */
+.status-badge.game .status-badge-dot {
+  background: var(--eii-accent-strong);
+  box-shadow: 0 0 8px rgba(86, 160, 255, 0.7);
 }
 
 .topology-map,

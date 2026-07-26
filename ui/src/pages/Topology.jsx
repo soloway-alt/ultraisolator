@@ -121,6 +121,7 @@ export function TopologyPage({ live }) {
               <span className="legend-item partition-game">{partitionLabel('game')}</span>
               <span className="legend-item partition-background">{partitionLabel('background')}</span>
               <span className="legend-item partition-housekeeping">{partitionLabel('housekeeping')}</span>
+              <span className="legend-item partition-unassigned">{partitionLabel('unassigned')}</span>
             </div>
           </div>
 

@@ -1386,11 +1386,11 @@ body {
 .core-tile:focus-visible,
 .core-tile.selected {
   border-color: var(--eii-accent);
-  box-shadow: inset 0 0 0 1px rgba(0, 212, 170, 0.28), 0 10px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(47, 126, 247, 0.28), 0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 .core-tile.selected {
-  background: rgba(0, 212, 170, 0.08);
+  background: rgba(47, 126, 247, 0.08);
 }
 
 .core-tile.parked {
@@ -1442,43 +1442,43 @@ body {
 }
 
 .partition-game {
-  color: var(--eii-accent-strong);
+  color: var(--eii-partition-game);
 }
 
 .partition-background {
-  color: var(--eii-warning);
+  color: var(--eii-partition-background);
 }
 
 .partition-housekeeping {
-  color: #8AB4F8;
+  color: var(--eii-partition-housekeeping);
 }
 
 .partition-unassigned {
-  color: var(--eii-muted);
+  color: var(--eii-partition-unassigned);
 }
 
+/* The partition rides a 3px top bar plus the caption; the tile body stays
+   neutral. "Unassigned" is dashed: absence of a partition, not a series. */
 .core-tile.partition-game {
-  border-top-color: rgba(0, 212, 170, 0.78);
+  border-top: 3px solid var(--eii-partition-game);
 }
 
 .core-tile.partition-background {
-  border-top-color: rgba(255, 184, 0, 0.72);
+  border-top: 3px solid var(--eii-partition-background);
 }
 
 .core-tile.partition-housekeeping {
-  border-top-color: rgba(138, 180, 248, 0.72);
+  border-top: 3px solid var(--eii-partition-housekeeping);
 }
 
 .core-tile.partition-unassigned {
-  border-top-color: rgba(90, 122, 122, 0.72);
+  border-top: 3px dashed var(--eii-partition-unassigned);
 }
 
-.core-tile.performance .core-type {
-  color: var(--eii-accent-strong);
-}
-
-.core-tile.efficiency .core-type {
-  color: #8AB4F8;
+/* On the brighter selected background the series color drops below AA
+   contrast; the 3px bar keeps the identity, the caption takes full ink. */
+.core-tile.selected .core-partition {
+  color: var(--eii-text);
 }
 
 .core-detail-panel {
