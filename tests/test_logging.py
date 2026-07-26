@@ -1,7 +1,10 @@
+import re
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from isolator.app import EsportsIsolatorPro
+from server.log_store import _TAG_RE
 
 
 class FakeLogHandle:
@@ -120,6 +123,30 @@ class LoggingTests(unittest.TestCase):
         # _last_reported_failure_prune starts at 0), then one per 60s window.
         self.assertLessEqual(len(prune_calls), 2)
         self.assertEqual(100, len(isolator.messages))
+
+
+class LogTagFormatTests(unittest.TestCase):
+    def test_every_bracket_log_prefix_in_isolator_matches_log_store_tag_re(self):
+        # Every "[TAG] ..." literal the engine can emit must parse into a tag
+        # by server.log_store._TAG_RE — otherwise the line reaches the UI with
+        # tag=None and the raw bracket prefix leaks into the message text
+        # (regression: "[RECOVERY:jail:auto]" was unparseable).
+        isolator_dir = Path(__file__).resolve().parent.parent / "isolator"
+        literal_prefix = re.compile(r"""(?:[rf]{1,2})?["'](\[[^\]"']*\])""")
+        brackets_seen = set()
+        offenders = []
+        for source_path in sorted(isolator_dir.glob("*.py")):
+            text = source_path.read_text(encoding="utf-8")
+            for match in literal_prefix.finditer(text):
+                bracket = match.group(1)
+                brackets_seen.add(bracket)
+                if not _TAG_RE.match(f"{bracket} x"):
+                    offenders.append(f"{source_path.name}: {bracket}")
+        # Sanity: the scan must keep finding the common tags, or the literal
+        # regex itself has regressed and the assertion below proves nothing.
+        self.assertIn("[WARN]", brackets_seen)
+        self.assertIn("[INFO]", brackets_seen)
+        self.assertEqual([], offenders)
 
 
 if __name__ == "__main__":

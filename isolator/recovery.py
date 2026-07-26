@@ -153,7 +153,10 @@ class RecoveryMixin:
             return True
 
         ok = True
-        prefix = "[RECOVERY:auto]" if auto else "[RECOVERY]"
+        # WHY: The mode qualifier lives AFTER the bracket so log_store._TAG_RE
+        # still parses the tag; the old colon-in-bracket prefix surfaced in
+        # the UI as tag=None with the raw bracket leaking into the message.
+        prefix = "[RECOVERY] auto:" if auto else "[RECOVERY]"
         self._log(f"{prefix} Persistent recovery state found. Attempting restore before continuing.")
 
         self._load_ifeo_backups()
@@ -439,7 +442,9 @@ class RecoveryMixin:
         return cleaned
 
     def _recover_jail_state_from_crash(self, auto=False):
-        prefix = "[RECOVERY:jail:auto]" if auto else "[RECOVERY:jail]"
+        # WHY: Qualifiers after the bracket keep the tag parseable by
+        # log_store._TAG_RE (see _recover_persistent_state).
+        prefix = "[RECOVERY] jail-auto:" if auto else "[RECOVERY] jail:"
         self._discard_legacy_jail_state()
         if not os.path.exists(JAIL_STATE_PATH):
             return True

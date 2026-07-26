@@ -127,7 +127,12 @@ class IsolatorBridge:
             engine = self._engine
         if engine is None:
             return self._stopped_status()
-        return engine.get_runtime_status()
+        # The engine has no "config" key; the Dashboard reads status.config.*
+        # for the power/timer indicators, so the bridge merges the persisted
+        # toggles into BOTH branches. Copy — never mutate the engine's dict.
+        status = dict(engine.get_runtime_status())
+        status["config"] = dict(self._status_config)
+        return status
 
     def live_client_count(self):
         with self._lock:

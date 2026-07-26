@@ -194,12 +194,42 @@ class BridgeLifecycleTests(unittest.TestCase):
                 admin_check=lambda: True,
             )
             stopped = bridge._stopped_status()
+            bridge._engine = engine
+            running = bridge.status()
 
-        # "config" is a deliberate bridge-only extra: the stopped UI still
-        # needs the persisted toggles even though no engine can report them.
-        # Every other key must stay in lockstep with the engine schema.
-        self.assertEqual(set(engine_status), set(stopped) - {"config"})
+        # The engine itself does not report "config"; the bridge merges the
+        # persisted toggles into BOTH branches, so bridge.status() has full
+        # key parity whether or not an engine is attached.
+        self.assertEqual(set(engine_status) | {"config"}, set(stopped))
+        self.assertEqual(set(stopped), set(running))
         self.assertEqual(set(engine_status["api"]), set(stopped["api"]))
+
+    def test_running_status_includes_persisted_config_toggles(self):
+        # The Dashboard reads status.config.* for the power/timer indicators;
+        # they must stay defined while the engine is running, and the bridge
+        # must merge into a copy rather than mutate the engine's status dict.
+        class StickyStatusEngine(FakeEngine):
+            def get_runtime_status(self):
+                if not hasattr(self, "_status"):
+                    self._status = super().get_runtime_status()
+                return self._status
+
+        engine = StickyStatusEngine()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = IsolatorBridge(
+                config_path=str(Path(tmpdir) / "config.json"),
+                engine_factory=lambda *_args: engine,
+                admin_check=lambda: True,
+            )
+            bridge.start()
+
+            status = bridge.status()
+
+        self.assertTrue(status["running"])
+        self.assertEqual(bridge._status_config, status["config"])
+        self.assertIn("disable_power_scheme_switch", status["config"])
+        self.assertIn("disable_timer_resolution_tweak", status["config"])
+        self.assertNotIn("config", engine.get_runtime_status())
 
     def test_stopped_status_keeps_the_complete_runtime_schema(self):
         bridge = IsolatorBridge(admin_check=lambda: True)

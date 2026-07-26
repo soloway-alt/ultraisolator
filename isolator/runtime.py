@@ -779,7 +779,7 @@ class RuntimeMixin:
             return False
         if not self._recover_jail_state_from_crash(auto=True):
             self._persistent_recovery_incomplete = True
-            self._log("[RECOVERY:jail:auto] Crash jail recovery incomplete; refusing to apply new system changes.")
+            self._log("[RECOVERY] jail-auto: Crash jail recovery incomplete; refusing to apply new system changes.")
             return False
         self._lock_working_set_memory()
         self._original_power_scheme = self._get_active_power_scheme()
