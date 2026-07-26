@@ -47,7 +47,9 @@ module.exports = defineConfig({
   expect: {
     timeout: 10000,
     toHaveScreenshot: {
-      maxDiffPixelRatio: 0.005
+      // Byte-identical: the visual baselines are the sole oracle for the
+      // CSS flatten, so no drift is tolerated.
+      maxDiffPixelRatio: 0
     }
   }
 });
