@@ -24,6 +24,14 @@ files = ["server", "isolator/config.py"]
 follow_imports = "silent"
 ignore_missing_imports = true
 
+[tool.pytest.ini_options]
+# The suite is written for `python -m unittest discover`, which imports the
+# isolator/server packages from the repo root via the CWD. pytest does not put
+# the rootdir on sys.path by itself, so declare it for contributors (and
+# hooks) that run the suite through pytest.
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [tool.coverage.run]
 source = ["isolator", "server"]
 
