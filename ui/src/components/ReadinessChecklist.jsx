@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { useBackendResource } from '../hooks/useBackendResource.js';
 import { translatedNotice } from '../utils/config.mjs';
@@ -47,11 +47,10 @@ function checkDetail(check, t) {
   return t(`readiness.check.${check.id}.${check.status}`, check.detail, check.data || {});
 }
 
-export function ReadinessChecklist({ live }) {
+export const ReadinessChecklist = memo(function ReadinessChecklist({ gameMode, visible }) {
   const { t } = useI18n();
-  const gameMode = Boolean(live.snapshot?.status?.game_mode);
-  const hiddenWindow = !live.visible && !gameMode;
-  const enabled = live.visible && !gameMode;
+  const hiddenWindow = !visible && !gameMode;
+  const enabled = visible && !gameMode;
   const state = useBackendResource('/api/readiness', {
     enabled,
     refreshPath: '/api/readiness?refresh=1'
@@ -131,4 +130,4 @@ export function ReadinessChecklist({ live }) {
       </div>
     </Tile>
   );
-}
+});

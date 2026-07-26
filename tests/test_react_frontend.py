@@ -391,7 +391,9 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertNotIn("Boost Potential", analysis)
         self.assertNotIn("GPU bottleneck", analysis)
         self.assertNotIn("MVP", analysis)
-        self.assertIn("game_mode", analysis)
+        # SystemAnalysis takes a narrow gameMode boolean; the raw status
+        # field is read once in Dashboard.jsx.
+        self.assertIn("gameMode", analysis)
         self.assertIn("paused", analysis)
         self.assertIn(".analysis-panel", styles)
         self.assertIn(".analysis-score", styles)

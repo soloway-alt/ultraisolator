@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from 'react';
+import { memo, useDeferredValue, useMemo, useState } from 'react';
 import { Tile } from '@carbon/react';
 import { PRIORITY_CLASS_LABELS, PROCESS_FILTERS } from '../constants/processes.mjs';
 import { useI18n } from '../i18n.jsx';
@@ -72,7 +72,7 @@ function processActionStatus(process) {
   return process.status || 'tracked';
 }
 
-export function ProcessTable({ snapshot }) {
+export const ProcessTable = memo(function ProcessTable({ snapshot }) {
   const { t } = useI18n();
   const [processFilter, setProcessFilter] = useState('all');
   const [processQuery, setProcessQuery] = useState('');
@@ -168,4 +168,4 @@ export function ProcessTable({ snapshot }) {
       </div>
     </Tile>
   );
-}
+});

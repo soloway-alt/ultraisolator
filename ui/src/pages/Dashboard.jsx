@@ -301,8 +301,8 @@ export const DashboardPage = memo(function DashboardPage({ live, page }) {
       </div>
 
       <div className="dashboard-insights">
-        <SystemAnalysis live={live} />
-        <ReadinessChecklist live={live} />
+        <SystemAnalysis gameMode={gameMode} visible={live.visible} engineRunning={Boolean(status.running)} />
+        <ReadinessChecklist gameMode={gameMode} visible={live.visible} />
       </div>
 
       <ProcessTable snapshot={snapshot} />

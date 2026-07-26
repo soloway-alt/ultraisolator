@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { useBackendResource } from '../hooks/useBackendResource.js';
 import { translatedNotice } from '../utils/config.mjs';
@@ -33,19 +33,17 @@ function checkDetail(check, t) {
   return t(`analysis.check.${check.id}.${check.status}`, check.detail, check.data || {});
 }
 
-export function SystemAnalysis({ live }) {
+export const SystemAnalysis = memo(function SystemAnalysis({ gameMode, visible, engineRunning }) {
   const { t } = useI18n();
-  const status = live.snapshot?.status || {};
-  const gameMode = Boolean(status.game_mode);
-  const hiddenWindow = !live.visible && !gameMode;
-  const enabled = live.visible && !gameMode;
+  const hiddenWindow = !visible && !gameMode;
+  const enabled = visible && !gameMode;
   // Refetch only on coarse transitions: enabled covers game mode and window
   // visibility, refreshKey covers engine start/stop. Finer status flips
   // (admin, timer, power plan, topology) stay with the manual Refresh button
   // instead of fanning out an /api/analysis request per live tick.
   const analysisResource = useBackendResource('/api/analysis', {
     enabled,
-    refreshKey: Boolean(status.running)
+    refreshKey: engineRunning
   });
   const pausedAnalysis = useMemo(() => ({
     ok: true,
@@ -161,4 +159,4 @@ export function SystemAnalysis({ live }) {
       )}
     </Tile>
   );
-}
+});
