@@ -1,35 +1,13 @@
+import { APP_SETTINGS_STORAGE_KEY } from '../constants/settings.mjs';
 import {
-  APP_SETTINGS_KEYS,
-  APP_SETTINGS_STORAGE_KEY,
-  APP_SETTINGS_VERSION,
-  DEFAULT_APP_SETTINGS
-} from '../constants/settings.mjs';
+  DEFAULT_APP_SETTINGS,
+  normalizeAppSettings,
+  normalizeAppSettingsPatch
+} from '../../shared/app-settings-schema.mjs';
 
-export function normalizeAppSettings(settings = {}) {
-  const language = settings.language === 'ru' ? 'ru' : 'en';
-  return {
-    settingsVersion: APP_SETTINGS_VERSION,
-    revision: Number.isSafeInteger(settings.revision) && settings.revision >= 0 ? settings.revision : 0,
-    language,
-    launchAtWindowsStartup: Boolean(settings.launchAtWindowsStartup),
-    minimizeToTrayOnStart: Boolean(settings.minimizeToTrayOnStart),
-    notificationToastsEnabled: settings.notificationToastsEnabled !== false,
-    firstRunCompleted: Boolean(settings.firstRunCompleted)
-  };
-}
-
-export function normalizeAppSettingsPatch(patch = {}) {
-  const normalized = {};
-  for (const key of APP_SETTINGS_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(patch, key)) {
-      continue;
-    }
-    normalized[key] = key === 'language'
-      ? (patch[key] === 'ru' ? 'ru' : 'en')
-      : Boolean(patch[key]);
-  }
-  return normalized;
-}
+// Normalization lives in the shared schema so the renderer cannot drift from
+// the Electron main process; re-exported here for renderer callers.
+export { normalizeAppSettings, normalizeAppSettingsPatch };
 
 export function loadLocalAppSettings() {
   try {

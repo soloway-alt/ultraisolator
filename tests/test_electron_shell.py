@@ -177,8 +177,11 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("app-settings:update", main)
         self.assertIn("function getAppSettingsForRenderer(event)", main)
         self.assertIn("function updateAppSettingsForRenderer(event, patch)", main)
-        self.assertIn("APP_SETTINGS_VERSION = 3", main)
-        self.assertIn("APP_SETTINGS_PATCH_KEYS", main)
+        self.assertIn("require('./shared/app-settings-schema.mjs')", main)
+        schema = (UI / "shared" / "app-settings-schema.mjs").read_text(encoding="utf-8")
+        self.assertIn("export const APP_SETTINGS_VERSION = 3", schema)
+        self.assertIn("export const APP_SETTINGS_PATCH_KEYS", schema)
+        self.assertIn("notificationToastsEnabled: candidate.notificationToastsEnabled !== false", schema)
         self.assertIn("revision", main)
         self.assertIn("validateAppSettingsPatch", main)
         self.assertIn("Object.keys(validatedPatch).length === 0", main)
@@ -187,7 +190,7 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("minimizeToTrayOnStart", main)
         self.assertIn("ipcHandlersRegistered", main)
         self.assertIn("if (appSettings.minimizeToTrayOnStart)", main)
-        self.assertIn("firstRunCompleted", main)
+        self.assertIn("firstRunCompleted", schema)
 
     def test_package_declares_windows_builder_targets_and_backend_resources(self):
         package = json.loads((UI / "package.json").read_text(encoding="utf-8"))

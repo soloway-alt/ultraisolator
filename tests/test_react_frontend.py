@@ -360,7 +360,11 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("suppress_in_game_mode", center)
         self.assertIn("App behavior", settings)
         self.assertIn("Show notification toasts", settings)
-        self.assertIn("notificationToastsEnabled", app_settings)
+        # The setting itself is defined in the shared schema; the renderer
+        # constants re-export it.
+        schema = (UI / "shared" / "app-settings-schema.mjs").read_text(encoding="utf-8")
+        self.assertIn("notificationToastsEnabled", schema)
+        self.assertIn("app-settings-schema.mjs", app_settings)
         self.assertIn("notificationText", center)
         self.assertIn("notification?.data", center)
         self.assertNotIn("<span>{notification.type}</span>", center)

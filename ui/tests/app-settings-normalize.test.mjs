@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAppSettings, normalizeAppSettingsPatch } from '../src/utils/appSettings.mjs';
+import { normalizeAppSettings, normalizeAppSettingsPatch } from '../shared/app-settings-schema.mjs';
 
 const EXPECTED_DEFAULTS = {
   settingsVersion: 3,

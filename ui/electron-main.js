@@ -28,23 +28,13 @@ const DEFAULT_RENDERER_HEIGHT = 820;
 const SHUTDOWN_TIMEOUT_MS = 5000;
 const LIFECYCLE_REQUEST_TIMEOUT_MS = 30000;
 const APP_SETTINGS_FILE = 'app-settings.json';
-const APP_SETTINGS_VERSION = 3;
-const DEFAULT_APP_SETTINGS = {
-  settingsVersion: APP_SETTINGS_VERSION,
-  revision: 0,
-  language: 'en',
-  launchAtWindowsStartup: false,
-  minimizeToTrayOnStart: false,
-  notificationToastsEnabled: true,
-  firstRunCompleted: false
-};
-const APP_SETTINGS_PATCH_KEYS = new Set([
-  'language',
-  'launchAtWindowsStartup',
-  'minimizeToTrayOnStart',
-  'notificationToastsEnabled',
-  'firstRunCompleted'
-]);
+// Canonical app-settings shape shared with the renderer; Electron 42's Node
+// supports synchronous require() of a synchronous ES module graph.
+const {
+  DEFAULT_APP_SETTINGS,
+  normalizeAppSettings,
+  validateAppSettingsPatch
+} = require('./shared/app-settings-schema.mjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -81,19 +71,6 @@ const LIVE_RECONNECT_DELAY_MS = 1500;
 // Canonical operation table shared with the renderer; Electron 42's Node
 // supports synchronous require() of a synchronous ES module graph.
 const { BACKEND_OPERATIONS: BACKEND_OPERATION_ALLOWLIST } = require('./shared/backend-operations.mjs');
-
-function normalizeAppSettings(candidate = {}) {
-  const language = candidate.language === 'ru' ? 'ru' : 'en';
-  return {
-    settingsVersion: APP_SETTINGS_VERSION,
-    revision: Number.isSafeInteger(candidate.revision) && candidate.revision >= 0 ? candidate.revision : 0,
-    language,
-    launchAtWindowsStartup: Boolean(candidate.launchAtWindowsStartup),
-    minimizeToTrayOnStart: Boolean(candidate.minimizeToTrayOnStart),
-    notificationToastsEnabled: candidate.notificationToastsEnabled !== false,
-    firstRunCompleted: Boolean(candidate.firstRunCompleted)
-  };
-}
 
 function appSettingsPath() {
   return path.join(app.getPath('userData'), APP_SETTINGS_FILE);
@@ -173,27 +150,6 @@ function persistAppSettings(settings) {
   const tmp = `${target}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
   fs.renameSync(tmp, target);
-}
-
-function validateAppSettingsPatch(patch) {
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
-    throw new TypeError('App settings patch must be an object.');
-  }
-  const validatedPatch = {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (!APP_SETTINGS_PATCH_KEYS.has(key)) {
-      throw new TypeError(`Unsupported app setting: ${key}`);
-    }
-    if (key === 'language') {
-      if (value !== 'en' && value !== 'ru') {
-        throw new TypeError('language must be en or ru.');
-      }
-    } else if (typeof value !== 'boolean') {
-      throw new TypeError(`${key} must be a boolean.`);
-    }
-    validatedPatch[key] = value;
-  }
-  return validatedPatch;
 }
 
 function writeAppSettings(patch) {

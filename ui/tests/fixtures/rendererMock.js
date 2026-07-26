@@ -423,6 +423,7 @@ function formatViolations(violations) {
 }
 
 module.exports = {
+  DEFAULT_APP_SETTINGS,
   installRendererMock,
   gotoMockedRenderer,
   waitForAppReady,

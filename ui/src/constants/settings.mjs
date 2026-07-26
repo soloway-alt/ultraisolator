@@ -1,24 +1,12 @@
 export const APP_SETTINGS_STORAGE_KEY = 'eii_app_settings';
 
-export const APP_SETTINGS_VERSION = 3;
-
-export const DEFAULT_APP_SETTINGS = {
-  settingsVersion: APP_SETTINGS_VERSION,
-  revision: 0,
-  language: 'en',
-  launchAtWindowsStartup: false,
-  minimizeToTrayOnStart: false,
-  notificationToastsEnabled: true,
-  firstRunCompleted: false
-};
-
-export const APP_SETTINGS_KEYS = [
-  'language',
-  'launchAtWindowsStartup',
-  'minimizeToTrayOnStart',
-  'notificationToastsEnabled',
-  'firstRunCompleted'
-];
+// The app-settings shape lives in the shared schema so the Electron main
+// process and the renderer cannot drift; re-exported here for renderer code.
+export {
+  APP_SETTINGS_VERSION,
+  DEFAULT_APP_SETTINGS,
+  APP_SETTINGS_PATCH_KEYS as APP_SETTINGS_KEYS
+} from '../../shared/app-settings-schema.mjs';
 
 export const CONFIG_PRESETS = [
   {

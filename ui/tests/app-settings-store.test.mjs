@@ -4,7 +4,7 @@ import { AppSettingsStore } from '../src/state/AppSettingsStore.mjs';
 import {
   normalizeAppSettings as normalizeSettings,
   normalizeAppSettingsPatch as normalizePatch
-} from '../src/utils/appSettings.mjs';
+} from '../shared/app-settings-schema.mjs';
 
 const defaults = {
   settingsVersion: 3,
