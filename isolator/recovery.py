@@ -1,6 +1,9 @@
 """Crash-recovery helpers for persistent system state."""
 
+import ctypes
+import os
 import re
+import time
 
 from .protected_state import (
     ProtectedStateError,
@@ -9,7 +12,25 @@ from .protected_state import (
     remove_protected_state_file,
     write_protected_state_file,
 )
-from .winapi import *
+from .winapi import (
+    ABOVE_NORMAL_PRIORITY_CLASS,
+    BELOW_NORMAL_PRIORITY_CLASS,
+    GUID,
+    HIGH_PRIORITY_CLASS,
+    IDLE_PRIORITY_CLASS,
+    IFEO_BACKUP_PATH,
+    JAIL_STATE_ENTRY_TTL_SECONDS,
+    JAIL_STATE_PATH,
+    JAIL_STATE_VERSION,
+    NORMAL_PRIORITY_CLASS,
+    PROCESS_QUERY_INFORMATION,
+    PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SET_INFORMATION,
+    PROCESS_SET_LIMITED_INFORMATION,
+    RECOVERY_STATE_PATH,
+    RECOVERY_STATE_VERSION,
+    kernel32,
+)
 
 GUID_STATE_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"

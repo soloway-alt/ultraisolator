@@ -1,6 +1,11 @@
 """BaseMixin implementation slice."""
 
-from .winapi import *
+import ctypes
+import os
+import re
+import time
+
+from .winapi import is_process_elevated, kernel32
 
 _CAPABILITY_METADATA = {
     "Administrator rights not detected: HKLM IFEO writes are disabled.": (

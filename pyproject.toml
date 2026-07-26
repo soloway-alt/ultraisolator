@@ -11,23 +11,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# These modules build on `from .winapi import *` (winapi re-exports the Win32
-# surface). The star imports are scheduled for replacement with explicit
-# imports; until then F403/F405 cannot be enforced.
-# F401: EsportsIsolatorPro/main are re-exported through the dynamic __all__.
+# best_isolator.py is a deliberate backward-compat re-export shim: it star-
+# imports the curated winapi surface (winapi defines __all__) so historical
+# `from best_isolator import X` consumers keep working.
 "best_isolator.py" = ["F401", "F403", "F405"]
-# F401: winapi's stdlib imports (os, re, time, threading, ...) are re-exported
-# to every engine module through the star imports above; removing them breaks
-# the package at runtime until the star imports are replaced.
-"isolator/winapi.py" = ["F401"]
-"isolator/app.py" = ["F403", "F405"]
-"isolator/base.py" = ["F403", "F405"]
-"isolator/discovery.py" = ["F403", "F405"]
-"isolator/ifeo_power.py" = ["F403", "F405"]
-"isolator/recovery.py" = ["F403", "F405"]
-"isolator/runtime.py" = ["F403", "F405"]
-"isolator/topology.py" = ["F403", "F405"]
-"isolator/tuning.py" = ["F403", "F405"]
 
 [tool.mypy]
 python_version = "3.10"

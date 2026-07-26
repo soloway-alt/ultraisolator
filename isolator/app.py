@@ -1,8 +1,13 @@
 """Public EsportsIsolatorPro class assembled from focused mixins."""
 
 import copy
+import ctypes
 import os
+import struct
 import sys
+import threading
+import time
+from ctypes import wintypes
 from dataclasses import dataclass, field
 
 from .base import BaseMixin
@@ -12,7 +17,13 @@ from .recovery import RecoveryMixin
 from .runtime import RuntimeMixin
 from .topology import TopologyMixin
 from .tuning import TuningMixin
-from .winapi import *
+from .winapi import (
+    HIGH_PERFORMANCE_GUID,
+    SYSTEM_PROCESS_INFORMATION,
+    ULTIMATE_PERFORMANCE_GUID,
+    kernel32,
+    make_guid,
+)
 
 
 @dataclass

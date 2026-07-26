@@ -1,6 +1,24 @@
 """DiscoveryMixin implementation slice."""
 
-from .winapi import *
+import ctypes
+import gc
+import json
+import os
+import re
+import time
+import winreg
+from ctypes import wintypes
+
+from .winapi import (
+    NON_GAME_DIR_PRUNE_TOKENS,
+    NON_GAME_EXE_NAME_PATTERN,
+    NON_GAME_PATH_TOKENS,
+    PROCESS_QUERY_LIMITED_INFORMATION,
+    STATUS_INFO_LENGTH_MISMATCH,
+    kernel32,
+    nt_success,
+    ntdll,
+)
 
 # WHY: Module-level constants — SPI-derived names hit _is_game_name_normalized
 # hundreds of times per poll; avoid per-call set literals and re-normalization.

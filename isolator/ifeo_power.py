@@ -1,5 +1,10 @@
 """IfeoPowerMixin implementation slice."""
 
+import ctypes
+import os
+import winreg
+from ctypes import wintypes
+
 from .protected_state import (
     ProtectedStateError,
     is_protected_state_path_safe,
@@ -7,7 +12,15 @@ from .protected_state import (
     remove_protected_state_file,
     write_protected_state_file,
 )
-from .winapi import *
+from .winapi import (
+    GUID,
+    IFEO_BACKUP_PATH,
+    IFEO_DENIED_EXES,
+    IFEO_VALUES,
+    POWER_ACCESS_SCHEME,
+    kernel32,
+    powrprof,
+)
 
 IFEO_STATE_VERSION = 2
 IFEO_STATE_OWNER = "EsportsIsolatorPRO"

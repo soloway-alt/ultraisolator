@@ -1,17 +1,108 @@
-import atexit
 import ctypes
-import gc
-import json
 import os
 import re
-import struct
-import sys
-import threading
-import time
-import winreg
 from ctypes import wintypes
 
 from .protected_state import default_protected_state_dir
+
+# WHY: The curated Win32/domain surface of this module. Engine modules import
+# these names explicitly, and best_isolator.py star-imports exactly this list
+# as its backward-compat re-export surface. Keep it in sync with the module
+# body; ruff flags entries that do not exist (F822).
+__all__ = [
+    # Status / error codes
+    "NTSTATUS",
+    "STATUS_INFO_LENGTH_MISMATCH",
+    "ERROR_ALREADY_EXISTS",
+    "ERROR_INSUFFICIENT_BUFFER",
+    "INVALID_HANDLE_VALUE",
+    # Process/thread access rights and information classes
+    "PROCESS_SET_INFORMATION",
+    "PROCESS_QUERY_INFORMATION",
+    "PROCESS_QUERY_LIMITED_INFORMATION",
+    "PROCESS_SET_LIMITED_INFORMATION",
+    "PROCESS_POWER_THROTTLING_CURRENT_VERSION",
+    "PROCESS_POWER_THROTTLING_EXECUTION_SPEED",
+    "PROCESS_INFORMATION_CLASS_POWER_THROTTLING",
+    "PROCESS_INFORMATION_CLASS_IO_PRIORITY",
+    "PROCESS_INFORMATION_CLASS_PAGE_PRIORITY",
+    "THREAD_QUERY_INFORMATION",
+    "THREAD_SET_INFORMATION",
+    "THREAD_QUERY_LIMITED_INFORMATION",
+    "THREAD_SET_LIMITED_INFORMATION",
+    "THREAD_PRIORITY_HIGHEST",
+    "THREAD_PRIORITY_ERROR_RETURN",
+    "TH32CS_SNAPTHREAD",
+    # Topology / CPU-set enumeration
+    "RelationCache",
+    "RelationAll",
+    "CpuSetInformation",
+    # Priority classes and page/IO priorities
+    "IDLE_PRIORITY_CLASS",
+    "BELOW_NORMAL_PRIORITY_CLASS",
+    "NORMAL_PRIORITY_CLASS",
+    "ABOVE_NORMAL_PRIORITY_CLASS",
+    "HIGH_PRIORITY_CLASS",
+    "PAGE_PRIORITY_MINIMUM",
+    "PAGE_PRIORITY_NORMAL",
+    "IO_PRIORITY_VERY_LOW",
+    "IO_PRIORITY_NORMAL",
+    # Singleton / recovery-state paths and policy
+    "MUTEX_NAME",
+    "RECOVERY_STATE_DIR",
+    "IFEO_BACKUP_PATH",
+    "RECOVERY_STATE_PATH",
+    "RECOVERY_STATE_VERSION",
+    "JAIL_STATE_PATH",
+    "JAIL_STATE_VERSION",
+    "JAIL_STATE_ENTRY_TTL_SECONDS",
+    # Console control events
+    "CTRL_C_EVENT",
+    "CTRL_BREAK_EVENT",
+    "CTRL_CLOSE_EVENT",
+    "CTRL_LOGOFF_EVENT",
+    "CTRL_SHUTDOWN_EVENT",
+    "CONSOLE_CTRL_HANDLER",
+    # IFEO policy
+    "IFEO_VALUES",
+    "IFEO_DENIED_EXES",
+    # Non-game exe/path filtering
+    "NON_GAME_EXE_NAME_PATTERN",
+    "NON_GAME_PATH_TOKENS",
+    "NON_GAME_DIR_PRUNE_TOKENS",
+    # Power schemes
+    "ULTIMATE_PERFORMANCE_GUID",
+    "HIGH_PERFORMANCE_GUID",
+    "POWER_ACCESS_SCHEME",
+    # DLL handles (carry the ctypes prototypes declared below)
+    "kernel32",
+    "ntdll",
+    "user32",
+    "powrprof",
+    "advapi32",
+    # Token elevation
+    "TOKEN_QUERY",
+    "TokenElevation",
+    # Structures
+    "TOKEN_ELEVATION",
+    "UNICODE_STRING",
+    "SYSTEM_PROCESS_INFORMATION",
+    "PROCESS_POWER_THROTTLING_STATE",
+    "GUID",
+    "PAGE_PRIORITY_INFORMATION",
+    "GROUP_AFFINITY",
+    "PROCESSOR_NUMBER",
+    "THREADENTRY32",
+    "CPU_SET_DATA",
+    "SYSTEM_CPU_SET_INFORMATION",
+    "CACHE_RELATIONSHIP",
+    "SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX",
+    "SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_CACHE",
+    # Helpers
+    "nt_success",
+    "is_process_elevated",
+    "make_guid",
+]
 
 NTSTATUS = wintypes.LONG
 STATUS_INFO_LENGTH_MISMATCH = ctypes.c_long(0xC0000004).value

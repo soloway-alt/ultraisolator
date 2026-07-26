@@ -1,6 +1,20 @@
 """TopologyMixin implementation slice."""
 
-from .winapi import *
+import ctypes
+import time
+from ctypes import wintypes
+
+from .winapi import (
+    CACHE_RELATIONSHIP,
+    GROUP_AFFINITY,
+    PROCESSOR_NUMBER,
+    SYSTEM_CPU_SET_INFORMATION,
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX,
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_CACHE,
+    CpuSetInformation,
+    RelationCache,
+    kernel32,
+)
 
 
 class TopologyMixin:
