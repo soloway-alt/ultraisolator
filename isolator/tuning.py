@@ -95,37 +95,6 @@ class TuningMixin:
                         "gen": self._entry_gen
                     }
 
-    def _remember_thread_state(self, pid, thread_id, handle):
-        pid = int(pid)
-        thread_id = int(thread_id)
-        # WHY: Check if snapshot is needed under the lock, but perform the
-        # expensive Win32 queries outside it — same pattern as _remember_process_state.
-        # GetThreadPriority / GetThreadSelectedCpuSets / GetThreadIdealProcessorEx
-        # can block 50-200ms under anti-cheat minifilters. Holding _state_lock
-        # during those calls blocks concurrent shutdown restoration.
-        needs_snapshot = False
-        with self._state_lock:
-            entry = self._touched.get(pid)
-            if not entry:
-                return
-            threads = entry.setdefault("threads", {})
-            if thread_id not in threads:
-                needs_snapshot = True
-        if needs_snapshot:
-            priority = kernel32.GetThreadPriority(handle)
-            cpu_sets = self._get_thread_selected_cpu_sets(handle)
-            ideal = self._get_thread_ideal_processor(handle)
-            with self._state_lock:
-                entry = self._touched.get(pid)
-                if entry:
-                    threads = entry.setdefault("threads", {})
-                    if thread_id not in threads:
-                        threads[thread_id] = {
-                            "priority": None if priority == THREAD_PRIORITY_ERROR_RETURN else int(priority),
-                            "cpu_set_ids": cpu_sets,
-                            "ideal_processor": ideal,
-                        }
-
     def _restore_thread_state(self, pid, thread_id):
         pid = int(pid)
         thread_id = int(thread_id)
@@ -182,203 +151,6 @@ class TuningMixin:
             thread_ids = list(entry.get("threads", {}).keys()) if entry else []
         for thread_id in thread_ids:
             self._restore_thread_state(pid, thread_id)
-
-    def _enumerate_process_threads(self, pid):
-        snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)
-        # WHY: Handle both NULL (0/None) and INVALID_HANDLE_VALUE failure returns.
-        # ctypes may return None, 0, or INVALID_HANDLE_VALUE on failure depending
-        # on the kernel error. We must check all cases to prevent calling
-        # CloseHandle on an invalid value or falling through to the iteration loop.
-        if not snapshot:
-            self._log_once(("snapshot_threads_null",), f"[WARN] CreateToolhelp32Snapshot returned NULL: {self._last_error_text()}")
-            return []
-        snapshot_value = ctypes.cast(snapshot, ctypes.c_void_p).value
-        if snapshot_value is None or snapshot_value == INVALID_HANDLE_VALUE:
-            self._log_once(("snapshot_threads", ctypes.get_last_error()), f"[WARN] CreateToolhelp32Snapshot failed: {self._last_error_text()}")
-            return []
-
-        threads = []
-        try:
-            entry = THREADENTRY32()
-            entry.dwSize = ctypes.sizeof(entry)
-            if not kernel32.Thread32First(snapshot, ctypes.byref(entry)):
-                return threads
-            while True:
-                if int(entry.th32OwnerProcessID) == int(pid):
-                    threads.append(
-                        {
-                            "thread_id": int(entry.th32ThreadID),
-                            "base_priority": int(entry.tpBasePri),
-                        }
-                    )
-                entry.dwSize = ctypes.sizeof(entry)
-                if not kernel32.Thread32Next(snapshot, ctypes.byref(entry)):
-                    break
-        finally:
-            kernel32.CloseHandle(snapshot)
-        return threads
-
-    def _sample_thread_snapshot(self, thread_info):
-        handle = self._open_thread(thread_info["thread_id"], THREAD_QUERY_INFORMATION | THREAD_QUERY_LIMITED_INFORMATION, quiet=True)
-        if not handle:
-            return None
-
-        try:
-            cycles = ctypes.c_ulonglong()
-            if not kernel32.QueryThreadCycleTime(handle, ctypes.byref(cycles)):
-                return None
-
-            creation_time = wintypes.FILETIME()
-            exit_time = wintypes.FILETIME()
-            kernel_time = wintypes.FILETIME()
-            user_time = wintypes.FILETIME()
-            if not kernel32.GetThreadTimes(handle, ctypes.byref(creation_time), ctypes.byref(exit_time), ctypes.byref(kernel_time), ctypes.byref(user_time)):
-                return None
-
-            return {
-                "thread_id": int(thread_info["thread_id"]),
-                "cycles": int(cycles.value),
-                "creation_time": self._filetime_to_int(creation_time),
-                "base_priority": int(thread_info["base_priority"]),
-            }
-        finally:
-            kernel32.CloseHandle(handle)
-
-    def _sample_hot_threads(self, pid):
-        threads = self._enumerate_process_threads(pid)
-        first_pass = {}
-        for thread_info in threads:
-            snapshot = self._sample_thread_snapshot(thread_info)
-            if snapshot:
-                first_pass[snapshot["thread_id"]] = snapshot
-        if not first_pass:
-            return []
-
-        if self._stop_event.wait(self.thread_sample_window_ms / 1000.0):
-            return []
-
-        hot_threads = []
-        for thread_id, first_snapshot in first_pass.items():
-            second_snapshot = self._sample_thread_snapshot({"thread_id": thread_id, "base_priority": first_snapshot["base_priority"]})
-            if not second_snapshot:
-                continue
-            hot_threads.append(
-                {
-                    "thread_id": thread_id,
-                    "cycle_delta": max(0, int(second_snapshot["cycles"]) - int(first_snapshot["cycles"])),
-                    "creation_time": int(first_snapshot["creation_time"]),
-                    "base_priority": int(first_snapshot["base_priority"]),
-                }
-            )
-        return hot_threads
-
-    def _classify_hot_threads(self, samples):
-        return sorted(samples, key=lambda sample: (-sample["cycle_delta"], sample["creation_time"], -sample["base_priority"], sample["thread_id"]))
-
-    def _select_thread_cpu_sets(self, rank):
-        game_cores = self._cpu_partitions.get("game_cores", [])
-        if not game_cores:
-            return []
-        return list(game_cores[rank % len(game_cores)]["cpu_set_ids"])
-
-    def _apply_thread_affinity_fallback(self, handle, pid, thread_id, cpu_set_ids):
-        cpus = [self._cpu_sets_by_id.get(int(cpu_set_id)) for cpu_set_id in cpu_set_ids]
-        cpus = [cpu for cpu in cpus if cpu]
-        if not cpus:
-            return False
-
-        target_group = cpus[0]["group"]
-        target_group_cpus = [cpu for cpu in cpus if cpu["group"] == target_group]
-        # WHY (item 8): A GROUP_AFFINITY mask is RELATIVE to its processor
-        # group — bit 0 is the first logical processor IN THAT GROUP, not the
-        # system-wide logical index. Using the system-wide logical_index
-        # (`1 << logical_index`) overflows / mis-targets the per-group 64-bit
-        # mask on machines with >64 logical processors or multiple groups
-        # (e.g. logical_index 80 would shift past the 64-bit mask). Compute the
-        # group-relative bit position (logical_index modulo 64) and guard
-        # against any shift >= 64 so the mask is always valid for the group.
-        mask = 0
-        for cpu in target_group_cpus:
-            bit = int(cpu["logical_index"]) % 64
-            mask |= 1 << bit
-        first_bit = int(target_group_cpus[0]["logical_index"]) % 64
-
-        previous_affinity = GROUP_AFFINITY()
-        target_affinity = GROUP_AFFINITY(ctypes.c_size_t(mask), wintypes.WORD(target_group), (wintypes.WORD * 3)(0, 0, 0))
-        if not kernel32.SetThreadGroupAffinity(handle, ctypes.byref(target_affinity), ctypes.byref(previous_affinity)):
-            return False
-
-        with self._state_lock:
-            entry = self._touched.get(int(pid))
-            if entry and int(thread_id) in entry.get("threads", {}):
-                thread_state = entry["threads"][int(thread_id)]
-                thread_state.setdefault(
-                    "group_affinity",
-                    {
-                        "group": int(previous_affinity.Group),
-                        "mask": int(previous_affinity.Mask),
-                    },
-                )
-
-        # WHY (item 8): PROCESSOR_NUMBER.Number is also group-relative, so use
-        # the same modulo-64 group-relative index as the mask bit above.
-        processor = PROCESSOR_NUMBER(target_group, first_bit, 0)
-        kernel32.SetThreadIdealProcessorEx(handle, ctypes.byref(processor), None)
-        return True
-
-    def _tune_hot_threads(self, pid):
-        # WHY: This entire path is gated OFF by default. It has two known
-        # issues that block production use:
-        # 1. _apply_thread_affinity_fallback has a race window between
-        #    SetThreadGroupAffinity and the lock-guarded write of the
-        #    previous_affinity into self._touched; under concurrent restore
-        #    the original affinity can be irrecoverable.
-        # 2. The 250ms cycle-time sampling pass causes measurable FPS
-        #    micro-stutters on 144Hz+ displays.
-        # Enable only via `enable_hot_thread_tuning: true` in config.json
-        # after auditing both issues against your specific topology.
-        if not getattr(self, "_enable_hot_thread_tuning", False):
-            return False
-        now = time.monotonic()
-        with self._state_lock:
-            if now - self._last_hot_thread_refresh.get(int(pid), 0.0) < self.hot_thread_refresh_s:
-                return False
-            self._last_hot_thread_refresh[int(pid)] = now
-
-        ranked_threads = self._classify_hot_threads(self._sample_hot_threads(pid))
-        if not ranked_threads:
-            return False
-
-        selected = ranked_threads[: self.hot_thread_limit]
-        selected_ids = {thread["thread_id"] for thread in selected}
-
-        with self._state_lock:
-            entry = self._touched.get(int(pid))
-            previous_thread_ids = list(entry.get("threads", {}).keys()) if entry else []
-
-        for thread_id in previous_thread_ids:
-            if thread_id not in selected_ids:
-                self._restore_thread_state(pid, thread_id)
-
-        changed = False
-        for rank, thread in enumerate(selected):
-            handle = self._open_thread(thread["thread_id"], THREAD_QUERY_LIMITED_INFORMATION | THREAD_SET_LIMITED_INFORMATION | THREAD_SET_INFORMATION, quiet=True)
-            if not handle:
-                continue
-            try:
-                self._remember_thread_state(pid, thread["thread_id"], handle)
-                thread_cpu_sets = self._select_thread_cpu_sets(rank)
-                applied = False
-                if thread_cpu_sets:
-                    applied = self._set_thread_selected_cpu_sets(handle, thread_cpu_sets)
-                    if not applied:
-                        applied = self._apply_thread_affinity_fallback(handle, pid, thread["thread_id"], thread_cpu_sets)
-                if rank < 2:
-                    kernel32.SetThreadPriority(handle, THREAD_PRIORITY_HIGHEST)
-                changed = changed or applied or rank < 2
-            finally:
-                kernel32.CloseHandle(handle)
-        return changed
 
     def _set_process_power_throttling(self, handle, enabled):
         state_mask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED if enabled else 0
@@ -580,7 +352,6 @@ class TuningMixin:
                     if not restore_failed:
                         remove_jail_state = current.get("source") == "jail"
                         self._touched.pop(pid, None)
-                        self._last_hot_thread_refresh.pop(pid, None)
             if remove_jail_state:
                 # Bulk callers pass a collector so N restores cost one batched
                 # file rewrite (_remove_jail_states) instead of N fsync cycles.
@@ -796,8 +567,6 @@ class TuningMixin:
                 self._set_process_io_priority(handle, IO_PRIORITY_NORMAL)
             except OSError:
                 pass
-
-            # Disabled _tune_hot_threads to prevent massive FPS micro-stutters
 
             if is_game:
                 self._log(f"[FOCUS] Boosted foreground game: {name}")
@@ -1040,8 +809,6 @@ class TuningMixin:
                 self._set_process_io_priority(handle, IO_PRIORITY_NORMAL)
             except OSError as e:
                 self._log_once(("io_prio", pid), f"[WARN] IoPriority failed: {e}")
-
-            # Disabled _tune_hot_threads to prevent massive FPS micro-stutters
 
             self._log(f"[GAME] Optimized running game: {name} (pid={pid})")
             return "applied"

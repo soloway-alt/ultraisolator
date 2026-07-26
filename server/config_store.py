@@ -18,8 +18,6 @@ DEFAULT_CONFIG = {
     "protected_extra": [],
     "app_profiles": [],
     "housekeeping_cores": 1,
-    "hot_thread_limit": 4,
-    "thread_sample_window_ms": 250,
     "poll_interval_idle_ms": 1000,
     "poll_interval_active_ms": 2000,
     "enable_background_jailing": False,
@@ -33,13 +31,23 @@ DEFAULT_CONFIG = {
     "gc_full_collect_interval_s": 1800,
     "maintenance_skip_after_quiet_cycles": 3,
     "log_file": "",
-    "enable_hot_thread_tuning": False,
-    "hot_thread_refresh_ms": 1000,
     "anti_cheat_mode": "aggressive",
     "event_backend": "poll",
     "allow_mmcss_injection": False,
     "disable_power_scheme_switch": False,
 }
+
+
+# Settings that existed in earlier releases and were removed (the hot-thread
+# tuning subsystem). A config.json written by an older build must stay
+# loadable, so these are tolerated on read and silently dropped; the next
+# update() rewrites the file without them.
+REMOVED_CONFIG_KEYS = frozenset({
+    "enable_hot_thread_tuning",
+    "hot_thread_limit",
+    "hot_thread_refresh_ms",
+    "thread_sample_window_ms",
+})
 
 
 CONFIG_SCHEMA = {
@@ -55,8 +63,6 @@ CONFIG_SCHEMA = {
         "restart_required": True,
     },
     "housekeeping_cores": {"type": "int", "min": 1, "max": 16, "restart_required": True},
-    "hot_thread_limit": {"type": "int", "min": 1, "max": 64, "restart_required": True},
-    "thread_sample_window_ms": {"type": "int", "min": 50, "max": 5000, "restart_required": True},
     "poll_interval_idle_ms": {"type": "int", "min": 50, "max": 60000, "restart_required": True},
     "poll_interval_active_ms": {"type": "int", "min": 50, "max": 30000, "restart_required": True},
     "enable_background_jailing": {"type": "bool", "restart_required": True},
@@ -70,8 +76,6 @@ CONFIG_SCHEMA = {
     "gc_full_collect_interval_s": {"type": "float", "min": 60, "max": 86400, "restart_required": True},
     "maintenance_skip_after_quiet_cycles": {"type": "int", "min": 0, "max": 100, "restart_required": True},
     "log_file": {"type": "string", "restart_required": True},
-    "enable_hot_thread_tuning": {"type": "bool", "restart_required": True},
-    "hot_thread_refresh_ms": {"type": "int", "min": 250, "max": 60000, "restart_required": True},
     "anti_cheat_mode": {"type": "choice", "choices": ["aggressive", "conservative"], "restart_required": True},
     "event_backend": {"type": "choice", "choices": ["poll"], "restart_required": True},
     "allow_mmcss_injection": {"type": "bool", "restart_required": True},
@@ -332,7 +336,7 @@ class ConfigStore:
         if not isinstance(candidate, dict):
             raise ConfigError([{"field": "$", "message": "config must be a JSON object."}])
         errors = []
-        unknown = sorted(set(candidate) - set(CONFIG_SCHEMA))
+        unknown = sorted(set(candidate) - set(CONFIG_SCHEMA) - REMOVED_CONFIG_KEYS)
         for field in unknown:
             errors.append({"field": field, "message": f"Unknown config field: {field}."})
 

@@ -166,8 +166,6 @@ class ReactFrontendContractTests(unittest.TestCase):
             "anti_cheat_mode",
             "protected_extra",
             "log_file",
-            "enable_hot_thread_tuning",
-            "hot_thread_refresh_ms",
             "event_backend",
             "allow_mmcss_injection",
         ):

@@ -284,7 +284,6 @@ export const en = {
     'hint.epic_library_paths': 'One Epic library folder per line.',
     'hint.protected_extra': 'Apps that must always remain unchanged, one name per line.',
     'hint.log_file': 'Leave empty to disable file logging.',
-    'hint.enable_hot_thread_tuning': 'Leave off for competitive play unless you are testing it deliberately.',
     'hint.allow_mmcss_injection': 'Advanced Windows multimedia scheduling option.',
     'analysis.title': 'Setup quality',
     'analysis.loadError': 'Unable to load analysis',
@@ -527,10 +526,6 @@ export const en = {
     'field.anti_cheat_mode': 'Anti-cheat compatibility',
     'field.protected_extra': 'Additional protected apps',
     'field.log_file': 'Activity log file',
-    'field.hot_thread_limit': 'Busy-thread limit',
-    'field.thread_sample_window_ms': 'Thread sample window',
-    'field.enable_hot_thread_tuning': 'Busy-thread tuning',
-    'field.hot_thread_refresh_ms': 'Busy-thread review interval',
     'field.event_backend': 'Process event source',
     'field.allow_mmcss_injection': 'Windows multimedia scheduling integration'
 };

@@ -24,8 +24,6 @@ class ParsedConfig:
     epic_library_paths: list
     app_profiles: dict
     housekeeping_core_count: int
-    hot_thread_limit: int
-    thread_sample_window_ms: int
     poll_interval_idle_s: float
     poll_interval_active_s: float
     enable_background_jailing: bool
@@ -38,10 +36,8 @@ class ParsedConfig:
     game_exit_restore_delay_s: float
     gc_full_collect_interval_s: float
     maintenance_skip_after_quiet_cycles: int
-    hot_thread_refresh_s: float
     event_backend: str
     allow_mmcss_injection: bool
-    enable_hot_thread_tuning: bool
     disable_power_scheme_switch: bool
     anti_cheat_mode: str
 
@@ -88,8 +84,6 @@ class ParsedConfig:
             epic_library_paths=config.get("epic_library_paths", []),
             app_profiles=cls._parse_app_profiles(owner, config),
             housekeeping_core_count=max(1, owner._safe_int(config.get("housekeeping_cores", 1), 1)),
-            hot_thread_limit=max(1, owner._safe_int(config.get("hot_thread_limit", 4), 4)),
-            thread_sample_window_ms=max(50, owner._safe_int(config.get("thread_sample_window_ms", 250), 250)),
             poll_interval_idle_s=max(0.05, owner._safe_int(config.get("poll_interval_idle_ms", 1000), 1000) / 1000.0),
             poll_interval_active_s=max(0.05, owner._safe_int(config.get("poll_interval_active_ms", 2000), 2000) / 1000.0),
             enable_background_jailing=bool(config.get("enable_background_jailing", False)),
@@ -102,10 +96,8 @@ class ParsedConfig:
             game_exit_restore_delay_s=max(0.0, float(config.get("game_exit_restore_delay_s", 10))),
             gc_full_collect_interval_s=max(60.0, float(config.get("gc_full_collect_interval_s", 1800))),
             maintenance_skip_after_quiet_cycles=max(0, owner._safe_int(config.get("maintenance_skip_after_quiet_cycles", 3), 3)),
-            hot_thread_refresh_s=max(0.25, owner._safe_int(config.get("hot_thread_refresh_ms", 1000), 1000) / 1000.0),
             event_backend=str(config.get("event_backend", "poll")).lower(),
             allow_mmcss_injection=bool(config.get("allow_mmcss_injection", False)),
-            enable_hot_thread_tuning=bool(config.get("enable_hot_thread_tuning", False)),
             disable_power_scheme_switch=bool(config.get("disable_power_scheme_switch", False)),
             anti_cheat_mode=str(config.get("anti_cheat_mode", "aggressive")).lower(),
         )
@@ -136,8 +128,6 @@ class RuntimeState:
     topology: object = None
     cpu_partitions: dict = field(default_factory=lambda: {"game": [], "background": [], "housekeeping": [], "game_cores": []})
     cpu_sets_by_id: dict = field(default_factory=dict)
-    llc_cache_sizes: dict = field(default_factory=dict)
-    last_hot_thread_refresh: dict = field(default_factory=dict)
     boosted_critical: dict = field(default_factory=dict)
     last_topology_refresh: float = 0.0
     last_steam_scan: float = float("-inf")
@@ -211,8 +201,6 @@ class EsportsIsolatorPro(
         self.epic_library_paths = parsed.epic_library_paths
         self.app_profiles = parsed.app_profiles
         self.housekeeping_core_count = parsed.housekeeping_core_count
-        self.hot_thread_limit = parsed.hot_thread_limit
-        self.thread_sample_window_ms = parsed.thread_sample_window_ms
         self.poll_interval_idle_s = parsed.poll_interval_idle_s
         self.poll_interval_active_s = parsed.poll_interval_active_s
         self.enable_background_jailing = parsed.enable_background_jailing
@@ -231,12 +219,8 @@ class EsportsIsolatorPro(
         log_file = self.config.get("log_file")
         if isinstance(log_file, str) and log_file.strip():
             self.set_log_file(log_file.strip())
-        self.hot_thread_refresh_s = parsed.hot_thread_refresh_s
         self.event_backend = parsed.event_backend
         self.allow_mmcss_injection = parsed.allow_mmcss_injection
-        # WHY: Hot-thread tuning is opt-in only. See _tune_hot_threads for
-        # the known correctness + perf issues that gate it off by default.
-        self._enable_hot_thread_tuning = parsed.enable_hot_thread_tuning
         # WHY: Escape hatch for the user-reported issue where Windows /
         # third-party tools accumulated multiple "Ultimate Performance"
         # power plans over time. Setting this to True skips the power-
@@ -338,8 +322,6 @@ class EsportsIsolatorPro(
         self._topology = state.topology
         self._cpu_partitions = state.cpu_partitions
         self._cpu_sets_by_id = state.cpu_sets_by_id
-        self._llc_cache_sizes = state.llc_cache_sizes
-        self._last_hot_thread_refresh = state.last_hot_thread_refresh
         self._boosted_critical = state.boosted_critical
         self._last_topology_refresh = state.last_topology_refresh
         self._last_steam_scan = state.last_steam_scan

@@ -215,55 +215,6 @@ class PROCESS_POWER_THROTTLING_STATE(ctypes.Structure):
     _fields_ = [("Version", wintypes.DWORD), ("ControlMask", wintypes.DWORD), ("StateMask", wintypes.DWORD)]
 
 
-class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
-    _fields_ = [
-        ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
-        ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
-        ("LimitFlags", wintypes.DWORD),
-        ("MinimumWorkingSetSize", ctypes.c_size_t),
-        ("MaximumWorkingSetSize", ctypes.c_size_t),
-        ("ActiveProcessLimit", wintypes.DWORD),
-        ("Affinity", ctypes.c_size_t),
-        ("PriorityClass", wintypes.DWORD),
-        ("SchedulingClass", wintypes.DWORD),
-    ]
-
-
-class IO_COUNTERS(ctypes.Structure):
-    _fields_ = [
-        ("ReadOperationCount", ctypes.c_ulonglong),
-        ("WriteOperationCount", ctypes.c_ulonglong),
-        ("OtherOperationCount", ctypes.c_ulonglong),
-        ("ReadTransferCount", ctypes.c_ulonglong),
-        ("WriteTransferCount", ctypes.c_ulonglong),
-        ("OtherTransferCount", ctypes.c_ulonglong),
-    ]
-
-
-class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-    _fields_ = [
-        ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
-        ("IoInfo", IO_COUNTERS),
-        ("ProcessMemoryLimit", ctypes.c_size_t),
-        ("JobMemoryLimit", ctypes.c_size_t),
-        ("PeakProcessMemoryUsed", ctypes.c_size_t),
-        ("PeakJobMemoryUsed", ctypes.c_size_t),
-    ]
-
-
-class _MINMAX_RATE(ctypes.Structure):
-    _fields_ = [("MinRate", wintypes.WORD), ("MaxRate", wintypes.WORD)]
-
-
-class _CPU_RATE_UNION(ctypes.Union):
-    _fields_ = [("CpuRate", wintypes.DWORD), ("Weight", wintypes.DWORD), ("MinMax", _MINMAX_RATE)]
-
-
-class JOBOBJECT_CPU_RATE_CONTROL_INFORMATION(ctypes.Structure):
-    _anonymous_ = ("Value",)
-    _fields_ = [("ControlFlags", wintypes.DWORD), ("Value", _CPU_RATE_UNION)]
-
-
 class GUID(ctypes.Structure):
     _fields_ = [
         ("Data1", wintypes.DWORD),
@@ -379,10 +330,6 @@ kernel32.GetProcessInformation.argtypes = [wintypes.HANDLE, wintypes.DWORD, wint
 kernel32.GetProcessInformation.restype = wintypes.BOOL
 kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.FILETIME), ctypes.POINTER(wintypes.FILETIME), ctypes.POINTER(wintypes.FILETIME), ctypes.POINTER(wintypes.FILETIME)]
 kernel32.GetProcessTimes.restype = wintypes.BOOL
-kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
-kernel32.CreateJobObjectW.restype = wintypes.HANDLE
-kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, wintypes.INT, wintypes.LPVOID, wintypes.DWORD]
-kernel32.SetInformationJobObject.restype = wintypes.BOOL
 kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
 kernel32.CreateMutexW.restype = wintypes.HANDLE
 kernel32.LocalFree.argtypes = [ctypes.c_void_p]

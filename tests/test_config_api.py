@@ -72,6 +72,29 @@ class ConfigStoreTests(unittest.TestCase):
                 os.path.normcase(os.path.realpath(saved["log_file"])),
             )
 
+    def test_removed_legacy_keys_stay_loadable_and_are_dropped_on_update(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.json"
+            config_path.write_text(json.dumps({
+                "games": ["custom.exe"],
+                "enable_hot_thread_tuning": True,
+                "hot_thread_limit": 8,
+                "hot_thread_refresh_ms": 500,
+                "thread_sample_window_ms": 100,
+            }), encoding="utf-8")
+            store = ConfigStore(str(config_path))
+
+            loaded = store.read()
+            self.assertEqual(["custom.exe"], loaded["config"]["games"])
+            self.assertNotIn("enable_hot_thread_tuning", loaded["config"])
+
+            store.update({"enable_background_jailing": True}, running=False)
+
+            saved = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(["custom.exe"], saved["games"])
+            for legacy_key in ("enable_hot_thread_tuning", "hot_thread_limit", "hot_thread_refresh_ms", "thread_sample_window_ms"):
+                self.assertNotIn(legacy_key, saved)
+
     def test_concurrent_updates_preserve_every_field_and_the_file_stays_valid(self):
         updates = {
             "housekeeping_cores": 2,
@@ -144,8 +167,6 @@ class ConfigStoreTests(unittest.TestCase):
         store = ConfigStore("__missing_config__.json")
         maximums = {
             "housekeeping_cores": 16,
-            "hot_thread_limit": 64,
-            "thread_sample_window_ms": 5000,
             "poll_interval_idle_ms": 60000,
             "poll_interval_active_ms": 30000,
             "maintenance_jail_batch_size": 64,
@@ -155,7 +176,6 @@ class ConfigStoreTests(unittest.TestCase):
             "game_exit_restore_delay_s": 300,
             "gc_full_collect_interval_s": 86400,
             "maintenance_skip_after_quiet_cycles": 100,
-            "hot_thread_refresh_ms": 60000,
         }
 
         schema = store.defaults_response()["schema"]

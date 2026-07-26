@@ -123,14 +123,10 @@ class RuntimeMixin:
             for pid in pids:
                 if pid not in active_pids and pid not in game_pids:
                     self._touched.pop(pid, None)
-                    self._last_hot_thread_refresh.pop(pid, None)
                 elif pid not in game_pids and pid != fg_pid:
                     entry = self._touched.get(pid)
                     if entry:
                         entry.get("threads", {}).clear()
-            for pid in list(self._last_hot_thread_refresh.keys()):
-                if pid not in active_pids:
-                    self._last_hot_thread_refresh.pop(pid, None)
 
         with self._state_lock:
             stale_keys = [
@@ -383,8 +379,6 @@ class RuntimeMixin:
                             self._handle_foreground_transition(last_fg_pid, fg_pid, game_was_running)
                             self._last_fg_transition_time = now
                         last_fg_pid = fg_pid
-                    elif fg_pid in current_game_pids:
-                        pass # Disabled _tune_hot_threads
             except Exception as exc:
                 # WHY: _log_once folds monitor exceptions by type plus a
                 # scrubbed message fingerprint, so distinct failures remain

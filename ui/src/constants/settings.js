@@ -109,10 +109,6 @@ export const CONFIG_SECTIONS = [
     title: 'For specialists',
     fields: [
       'gc_full_collect_interval_s',
-      'hot_thread_limit',
-      'thread_sample_window_ms',
-      'enable_hot_thread_tuning',
-      'hot_thread_refresh_ms',
       'event_backend',
       'allow_mmcss_injection',
       'log_file'
@@ -143,10 +139,6 @@ export const FIELD_LABELS = {
   anti_cheat_mode: 'Anti-cheat compatibility',
   protected_extra: 'Additional protected apps',
   log_file: 'Activity log file',
-  hot_thread_limit: 'Busy-thread limit',
-  thread_sample_window_ms: 'Thread sample window',
-  enable_hot_thread_tuning: 'Busy-thread tuning',
-  hot_thread_refresh_ms: 'Busy-thread review interval',
   event_backend: 'Process event source',
   allow_mmcss_injection: 'Windows multimedia scheduling integration'
 };
@@ -163,6 +155,5 @@ export const FIELD_HINTS = {
   epic_library_paths: 'One Epic library folder per line.',
   protected_extra: 'Apps that must always remain unchanged, one name per line.',
   log_file: 'Leave empty to disable file logging.',
-  enable_hot_thread_tuning: 'Leave off for competitive play unless you are testing it deliberately.',
   allow_mmcss_injection: 'Advanced Windows multimedia scheduling option.'
 };

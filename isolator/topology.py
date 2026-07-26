@@ -198,7 +198,6 @@ class TopologyMixin:
             llc["efficiency_class"] = max(llc["efficiency_class"], core["efficiency_class"])
 
         sorted_cores = sorted(core_groups.values(), key=self._score_core_group, reverse=True)
-        llc_cache_sizes = {key: value["l3_size"] for key, value in llc_groups.items()}
         topology = {
             "cpu_sets": cpu_sets,
             "core_groups": sorted_cores,
@@ -210,7 +209,6 @@ class TopologyMixin:
         # topology atomically for concurrent API readers.
         with self._state_lock:
             self._cpu_sets_by_id = cpu_sets_by_id
-            self._llc_cache_sizes = llc_cache_sizes
             self._topology = topology
         return topology
 
