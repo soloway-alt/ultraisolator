@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Tag } from '@carbon/react';
 import PlayIcon from '@carbon/icons-react/es/PlayFilledAlt.js';
 import StopIcon from '@carbon/icons-react/es/StopFilledAlt.js';
@@ -33,7 +33,7 @@ function capabilityIssueText(issue, t) {
   );
 }
 
-export function DashboardPage({ live }) {
+export const DashboardPage = memo(function DashboardPage({ live }) {
   const { t } = useI18n();
   const [actionState, setActionState] = useState({ pending: null, error: null, lastAction: null });
   const snapshot = live.snapshot;
@@ -309,4 +309,4 @@ export function DashboardPage({ live }) {
       <ProcessTable snapshot={snapshot} />
     </section>
   );
-}
+});

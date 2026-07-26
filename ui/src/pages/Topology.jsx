@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
@@ -24,7 +24,7 @@ const CORE_TYPE_FALLBACK_LABELS = {
   mixed: 'Mixed'
 };
 
-export function TopologyPage({ live }) {
+export const TopologyPage = memo(function TopologyPage({ live }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const [selectedCoreId, setSelectedCoreId] = useState(null);
@@ -199,4 +199,4 @@ export function TopologyPage({ live }) {
       </div>
     </section>
   );
-}
+});

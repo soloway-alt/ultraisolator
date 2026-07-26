@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 
 const MAX_NOTIFICATION_HISTORY = 80;
 
@@ -36,14 +36,11 @@ function normalizeNotification(notification) {
 }
 
 function appendNotification(current, notification) {
-  const next = [normalizeNotification(notification), ...(current.notifications || [])];
+  const next = [normalizeNotification(notification), ...current];
   if (next.length > MAX_NOTIFICATION_HISTORY) {
     next.length = MAX_NOTIFICATION_HISTORY;
   }
-  return {
-    ...current,
-    notifications: next
-  };
+  return next;
 }
 
 function decodeLivePayload(data) {
@@ -53,15 +50,25 @@ function decodeLivePayload(data) {
   return JSON.parse(data);
 }
 
+// Live state is held in separate cells (connection, snapshot, notifications)
+// so a snapshot tick does not invalidate notification consumers and a
+// notification frame does not invalidate snapshot consumers.
 export function useLiveSnapshot() {
   const [visible, setVisible] = useState(() => isRendererVisible());
-  const [state, setState] = useState({
+  const [connection, setConnection] = useState({
     connectionState: isRendererVisible() ? 'idle' : 'paused',
-    snapshot: null,
-    notifications: [],
-    lastUpdated: null,
     error: null
   });
+  const [snapshot, setSnapshot] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+
+  const setConnectionState = (connectionState, error = null) => {
+    setConnection((current) => (
+      current.connectionState === connectionState && current.error === error
+        ? current
+        : { connectionState, error }
+    ));
+  };
 
   useEffect(() => {
     const updateVisibility = () => {
@@ -87,20 +94,12 @@ export function useLiveSnapshot() {
   useEffect(() => {
     if (!visible) {
       window.isolator?.stopLiveSnapshot?.();
-      setState((current) => ({
-        ...current,
-        connectionState: 'paused',
-        error: null
-      }));
+      setConnectionState('paused');
       return undefined;
     }
 
     if (!window.isolator?.startLiveSnapshot || !window.isolator?.onLiveSnapshot) {
-      setState((current) => ({
-        ...current,
-        connectionState: 'error',
-        error: 'live stream unavailable'
-      }));
+      setConnectionState('error', 'live stream unavailable');
       return undefined;
     }
 
@@ -110,26 +109,17 @@ export function useLiveSnapshot() {
       if (disposed) {
         return;
       }
-      let snapshot;
+      let nextSnapshot;
       try {
-        snapshot = normalizeSnapshot(decodeLivePayload(data));
+        nextSnapshot = normalizeSnapshot(decodeLivePayload(data));
       } catch (parseError) {
         console.error('[live] failed to parse snapshot frame', parseError);
-        setState((current) => ({
-          ...current,
-          connectionState: 'error',
-          error: 'malformed live frame'
-        }));
+        setConnectionState('error', 'malformed live frame');
         return;
       }
       startTransition(() => {
-        setState((current) => ({
-          connectionState: 'connected',
-          snapshot,
-          notifications: current.notifications,
-          lastUpdated: new Date(),
-          error: null
-        }));
+        setSnapshot(nextSnapshot);
+        setConnectionState('connected');
       });
     };
 
@@ -142,15 +132,11 @@ export function useLiveSnapshot() {
         notification = decodeLivePayload(data);
       } catch (parseError) {
         console.error('[live] failed to parse notification frame', parseError);
-        setState((current) => ({
-          ...current,
-          connectionState: 'error',
-          error: 'malformed notification frame'
-        }));
+        setConnectionState('error', 'malformed notification frame');
         return;
       }
       startTransition(() => {
-        setState((current) => appendNotification(current, notification));
+        setNotifications((current) => appendNotification(current, notification));
       });
     };
 
@@ -160,11 +146,15 @@ export function useLiveSnapshot() {
       }
       const eventName = event?.eventName || 'message';
       if (eventName === 'state') {
-        setState((current) => ({
-          ...current,
-          connectionState: event.data?.connectionState || current.connectionState,
-          error: event.data?.error || null
-        }));
+        setConnection((current) => {
+          const next = {
+            connectionState: event.data?.connectionState || current.connectionState,
+            error: event.data?.error || null
+          };
+          return next.connectionState === current.connectionState && next.error === current.error
+            ? current
+            : next;
+        });
       } else if (eventName === 'snapshot') {
         handleSnapshot(event.data);
       } else if (eventName === 'notification') {
@@ -175,11 +165,7 @@ export function useLiveSnapshot() {
     const removeLiveListener = window.isolator.onLiveSnapshot(handleLiveEvent);
     window.isolator.startLiveSnapshot().catch((error) => {
       if (!disposed) {
-        setState((current) => ({
-          ...current,
-          connectionState: 'error',
-          error: error instanceof Error ? error.message : 'live stream unavailable'
-        }));
+        setConnectionState('error', error instanceof Error ? error.message : 'live stream unavailable');
       }
     });
 
@@ -192,5 +178,11 @@ export function useLiveSnapshot() {
     };
   }, [visible]);
 
-  return useMemo(() => ({ ...state, visible }), [state, visible]);
+  return {
+    connectionState: connection.connectionState,
+    error: connection.error,
+    snapshot,
+    notifications,
+    visible
+  };
 }

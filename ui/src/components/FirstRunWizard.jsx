@@ -7,7 +7,7 @@ import { requestJson } from '../utils/api.mjs';
 
 const STEP_COUNT = 3;
 
-export function FirstRunWizard({ live }) {
+export function FirstRunWizard({ status = {}, connectionState = 'idle', snapshotKnown = false }) {
   const { t } = useI18n();
   const { settings, ready: settingsReady, updateSettings } = useAppSettings();
   const [step, setStep] = useState(1);
@@ -46,10 +46,8 @@ export function FirstRunWizard({ live }) {
   }
 
   const selectedPreset = CONFIG_PRESETS.find((preset) => preset.id === selectedPresetId) || CONFIG_PRESETS[0];
-  const status = live?.snapshot?.status || {};
-  const connectionState = live?.connectionState || 'idle';
   const adminKnown = typeof status.admin === 'boolean';
-  const recoveryKnown = connectionState === 'connected' && Boolean(live?.snapshot);
+  const recoveryKnown = connectionState === 'connected' && snapshotKnown;
   const recoveryReady = recoveryKnown
     && !status.persistent_recovery_incomplete
     && Number(status.reported_failure_count || 0) === 0;

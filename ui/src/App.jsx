@@ -34,8 +34,14 @@ function pageIdFromHash() {
 
 function AppShell() {
   const [activePageId, setActivePageId] = useState(() => pageIdFromHash());
-  const live = useLiveSnapshot();
+  const { connectionState, snapshot, notifications, visible } = useLiveSnapshot();
   const { t } = useI18n();
+  // Pages see only the slices they read; notifications stay out so a
+  // notification frame does not re-render the active page (they are memoized).
+  const live = useMemo(
+    () => ({ connectionState, snapshot, visible }),
+    [connectionState, snapshot, visible]
+  );
   const activePage = useMemo(
     () => PAGES.find((page) => page.id === activePageId) || PAGES[0],
     [activePageId]
@@ -66,8 +72,8 @@ function AppShell() {
       <Header aria-label="UltraIsolator">
         <HeaderGlobalBar>
           <div className="header-status">
-            <span className={`stream-dot ${live.connectionState}`} aria-hidden="true" />
-            {t(`connection.${live.connectionState}`, live.connectionState)}
+            <span className={`stream-dot ${connectionState}`} aria-hidden="true" />
+            {t(`connection.${connectionState}`, connectionState)}
           </div>
         </HeaderGlobalBar>
       </Header>
@@ -98,8 +104,15 @@ function AppShell() {
         <Content className="main-content" tabIndex={0}>
           <ActivePage page={activePage} live={live} />
         </Content>
-        <NotificationCenter live={live} />
-        <FirstRunWizard live={live} />
+        <NotificationCenter
+          notifications={notifications}
+          gameMode={Boolean(snapshot?.status?.game_mode)}
+        />
+        <FirstRunWizard
+          status={snapshot?.status}
+          connectionState={connectionState}
+          snapshotKnown={Boolean(snapshot)}
+        />
       </ErrorBoundary>
     </div>
   );

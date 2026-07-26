@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { ConfigField } from '../components/ConfigField.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
@@ -18,7 +18,7 @@ function displayConfigPath(configPath) {
   return parts.at(-1) || 'config.json';
 }
 
-export function SettingsPage({ live }) {
+export const SettingsPage = memo(function SettingsPage({ live }) {
   const { t } = useI18n();
   const { settings: appSettings, updateSettings } = useAppSettings();
   const status = live.snapshot?.status || {};
@@ -409,4 +409,4 @@ export function SettingsPage({ live }) {
       )}
     </section>
   );
-}
+});

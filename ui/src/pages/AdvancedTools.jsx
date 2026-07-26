@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
@@ -33,7 +33,7 @@ function deviceClassLabel(deviceClass, t) {
     : deviceClass;
 }
 
-export function AdvancedToolsPage({ live }) {
+export const AdvancedToolsPage = memo(function AdvancedToolsPage({ live }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
@@ -127,4 +127,4 @@ export function AdvancedToolsPage({ live }) {
       </Tile>
     </section>
   );
-}
+});

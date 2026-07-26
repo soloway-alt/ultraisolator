@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Tag } from '@carbon/react';
 import NotificationIcon from '@carbon/icons-react/es/Notification.js';
 import CloseIcon from '@carbon/icons-react/es/Close.js';
@@ -31,14 +31,13 @@ function notificationText(notification, field, t) {
   return t(key, fallback, notification?.data || {});
 }
 
-export function NotificationCenter({ live }) {
+export const NotificationCenter = memo(function NotificationCenter({ notifications: liveNotifications, gameMode }) {
   const { language, t } = useI18n();
   const { settings } = useAppSettings();
   const [open, setOpen] = useState(false);
   const [toastIds, setToastIds] = useState([]);
   const seenToastIds = useRef(new Set());
-  const notifications = Array.isArray(live.notifications) ? live.notifications : [];
-  const gameMode = Boolean(live.snapshot?.status?.game_mode);
+  const notifications = Array.isArray(liveNotifications) ? liveNotifications : [];
   const toastsEnabled = settings.notificationToastsEnabled !== false;
 
   useEffect(() => {
@@ -138,4 +137,4 @@ export function NotificationCenter({ live }) {
       ) : null}
     </>
   );
-}
+});

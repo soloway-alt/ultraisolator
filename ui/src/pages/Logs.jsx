@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
@@ -51,7 +51,7 @@ function reasonText(payload, t) {
   return t('logs.reason.unavailable', 'Logs unavailable');
 }
 
-export function LogsPage({ live }) {
+export const LogsPage = memo(function LogsPage({ live }) {
   const { t } = useI18n();
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
@@ -235,4 +235,4 @@ export function LogsPage({ live }) {
       </Tile>
     </section>
   );
-}
+});
