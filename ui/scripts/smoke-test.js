@@ -162,23 +162,9 @@ async function main() {
     }
     assert(fs.existsSync(path.join(path.dirname(distIndex), asset)), `dist asset is missing: ${asset}`);
   }
-  const styles = fs.readFileSync(path.join(UI_ROOT, 'src', 'styles.css'), 'utf8');
-  assert(styles.includes('overflow-y: auto'), 'The renderer must expose a vertical scroll container for long pages.');
-  assert(!styles.includes('unknown'), 'User-facing stylesheet state labels should avoid unknown/debug vocabulary.');
-  const electronMain = fs.readFileSync(path.join(UI_ROOT, 'electron-main.js'), 'utf8');
-  const appSource = fs.readFileSync(path.join(UI_ROOT, 'src', 'App.jsx'), 'utf8');
-  const settingsConstants = fs.readFileSync(path.join(UI_ROOT, 'src', 'constants', 'settings.mjs'), 'utf8');
-  const appSettingsSchema = fs.readFileSync(path.join(UI_ROOT, 'shared', 'app-settings-schema.mjs'), 'utf8');
-  assert(appSettingsSchema.includes('minimizeToTrayOnStart: false'), 'App settings must default to opening the dashboard on startup.');
-  assert(appSettingsSchema.includes("language: 'en'"), 'App settings must include a persisted language preference.');
-  assert(electronMain.includes("require('./shared/app-settings-schema.mjs')"), 'Electron must read app-settings defaults from the shared schema.');
-  assert(settingsConstants.includes('app-settings-schema.mjs'), 'Renderer settings constants must re-export the shared app-settings schema.');
-  assert(electronMain.includes('Menu.setApplicationMenu(null)'), 'Electron must remove the default File/Edit/View/Window menu.');
-  assert(electronMain.includes('mainWindow.removeMenu()'), 'Electron BrowserWindow must remove the native menu bar.');
-  assert(electronMain.includes("loadFile(target.target, { hash: 'dashboard' })"), 'Packaged app must open on Dashboard instead of restoring a stale hash page.');
-  assert(appSource.includes('hashchange'), 'Sidebar navigation must support hash changes for robust page switching.');
-  assert(appSource.includes("scrollTo({ top: 0, left: 0 })"), 'Page navigation must reset the main scroll container to the top.');
-
+  // Source-text checks live in the Python contract suites and the unit
+  // tests; the smoke test's unique value is the dist asset graph above and
+  // the live API round trip below.
   apiProcess = spawn(pythonCommand, [
     '-m',
     'server',

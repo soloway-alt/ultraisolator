@@ -42,6 +42,10 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("rendererLoaded", main)
         self.assertIn("ensureRendererLoaded", main)
         self.assertIn("await ensureRendererLoaded()", main)
+        self.assertIn("Menu.setApplicationMenu(null)", main)
+        self.assertIn("mainWindow.removeMenu()", main)
+        # The packaged app must open on Dashboard, not a restored stale hash.
+        self.assertIn("loadFile(target.target, { hash: 'dashboard' })", main)
         self.assertIn("new Tray", main)
         self.assertIn("Open Dashboard", tray_module)
         self.assertIn("Start Isolator", tray_module)

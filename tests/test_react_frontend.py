@@ -498,6 +498,15 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("'dashboard.compatibility': 'Compatibility'", english)
         self.assertIn("'dashboard.compatibility': 'Совместимость'", russian)
 
+    def test_app_preserves_hash_navigation_and_scroll_reset(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("hashchange", app)
+        self.assertIn("scrollTo({ top: 0, left: 0 })", app)
+        self.assertIn("overflow-y: auto", styles)
+        self.assertNotIn("unknown", styles)
+
     def test_flattened_stylesheet_carries_the_premium_theme(self):
         # premium.css was flattened into styles.css by the cascade-winner
         # merge; the single stylesheet must carry the premium tokens and
