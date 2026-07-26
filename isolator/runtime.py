@@ -7,6 +7,7 @@ import threading
 import time
 from ctypes import wintypes
 from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from .winapi import (
     CONSOLE_CTRL_HANDLER,
@@ -80,7 +81,120 @@ class MonitorCycle:
         return cls(last_cleanup=now, last_gc_sweep=now, last_gc_gen0_sweep=now)
 
 
+class RuntimeHost(Protocol):
+    """Typing-only host contract for RuntimeMixin.
+
+    Enumerates every attribute and cross-mixin method RuntimeMixin reads but
+    does not own. EsportsIsolatorPro.__init__ provides the attributes (from
+    ParsedConfig / RuntimeState / Win32Scratch); the mixins named in the
+    comments provide the methods. RuntimeMixin deliberately does NOT inherit
+    from this Protocol — that would change the MRO for zero runtime benefit —
+    it exists so the implicit host coupling is written down and reviewable in
+    one place.
+
+    NOTE: run()/shutdown() also WRITE host state consumed elsewhere:
+    _original_power_scheme (read by IfeoPowerMixin's restore path),
+    _persistent_recovery_incomplete (surfaced by get_runtime_status), and
+    _console_ctrl_callback (owned here to pin the WINFUNCTYPE wrapper).
+    """
+
+    # -- config (ParsedConfig-backed) --
+    enable_background_jailing: bool
+    maintenance_jail_batch_size: int
+    maintenance_jail_interval_s: float
+    maintenance_jail_batch_cooldown_s: float
+    maintenance_skip_after_quiet_cycles: int
+    game_close_debounce_s: float
+    game_exit_restore_delay_s: float
+    gc_full_collect_interval_s: float
+    poll_interval_active_s: float
+    poll_interval_idle_s: float
+    auto_detect_steam: bool
+    auto_detect_epic: bool
+    anti_cheat_mode: str
+    _disable_game_priority_boost: bool
+    _disable_timer_resolution_tweak: bool
+    _disable_power_scheme_switch: bool
+
+    # -- identity / scratch --
+    _self_pid: int
+    _parent_pid: int
+    _is_admin: bool
+    _fg_pid_dword: Any  # pre-allocated wintypes.DWORD
+
+    # -- shared runtime state (RuntimeState-backed) --
+    _state_lock: threading.Lock
+    _mutation_idle: threading.Condition
+    _active_mutations: int
+    _shutting_down: bool
+    _shutdown_done: bool
+    _stop_event: threading.Event
+    _monitor_thread: threading.Thread | None
+    _touched: dict
+    _active_games: dict
+    _reported_failures: dict
+    _known_non_games: set
+    _path_classification_cache: dict
+    _protected_cache: dict
+    _library_scan_ready: threading.Event
+    _last_steam_scan: float
+    _last_epic_scan: float
+    _last_topology_refresh: float
+    _last_fg_transition_time: float
+    _foreground_transition_debounce_s: float
+    _power_plan_active: bool
+    _power_scheme_set_unverified: bool
+    _capability_notes: list
+    _cpu_partitions: dict
+    _mutex_handle: Any
+    _timer_resolution_applied: Any
+
+    # -- cross-mixin methods --
+    # BaseMixin
+    def _log(self, message): ...
+    def _log_once(self, key, message): ...
+    def _normalize_name(self, name): ...
+    def _last_error_text(self): ...
+    def _prune_reported_failures_locked(self, now=None): ...
+    def _close_log_file(self): ...
+    # DiscoveryMixin
+    def _get_processes(self): ...
+    def _get_process_name(self, pid): ...
+    def _is_game_name(self, name): ...
+    def _is_game_name_normalized(self, normalized): ...
+    def _request_library_scan(self, force=False): ...
+    # TuningMixin
+    def _isolate_background(self, max_new=None, log_names=False, processes=None): ...
+    def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0): ...
+    def _boost_foreground(self, pid): ...
+    def _find_game_process_entries(self, processes=None): ...
+    def _optimize_game_with_state(self, pid, name=None, classified_as_game=False): ...
+    def _restore_process(self, pid, deferred_jail_removals=None): ...
+    def _restore_all_processes(self): ...
+    def _boost_system_critical(self): ...
+    def _restore_system_critical(self): ...
+    # TopologyMixin
+    def _refresh_topology(self, reason="periodic"): ...
+    # IfeoPowerMixin
+    def _get_active_power_scheme(self): ...
+    def _set_preferred_power_scheme(self): ...
+    def _restore_power_scheme(self): ...
+    def _load_ifeo_backups(self): ...
+    def _apply_configured_game_ifeo_priorities(self): ...
+    def _restore_ifeo_priorities(self): ...
+    # RecoveryMixin
+    def _recover_persistent_state(self, auto=False): ...
+    def _recover_jail_state_from_crash(self, auto=False): ...
+    def _write_power_recovery_state(self, original_scheme=None, switched=None, scheme_in_use=None): ...
+
+
 class RuntimeMixin:
+    """Monitor loop, lifecycle (run/shutdown), and MonitorCycle step drivers.
+
+    Host contract: RuntimeHost (above) documents every attribute and
+    cross-mixin method this mixin consumes but does not assign.
+    """
+
     def _run_background_jail(self, initial=False, processes=None):
         if not self.enable_background_jailing:
             if initial:

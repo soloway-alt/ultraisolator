@@ -9,6 +9,7 @@ import threading
 import time
 import winreg
 from ctypes import wintypes
+from typing import Any, Protocol
 
 from .winapi import (
     NON_GAME_DIR_PRUNE_TOKENS,
@@ -47,7 +48,72 @@ _PROTECTED_TITLE_TOKENS = ("easyanticheat", "battleye", "beservice", "vgc", "vgt
 LIBRARY_SCAN_BUDGET_S = 15.0
 
 
+class DiscoveryHost(Protocol):
+    """Typing-only host contract for DiscoveryMixin.
+
+    Enumerates every attribute and cross-mixin method DiscoveryMixin reads
+    but does not own. EsportsIsolatorPro.__init__ provides the attributes
+    (from ParsedConfig / RuntimeState / Win32Scratch); the mixins named in
+    the comments provide the methods. DiscoveryMixin deliberately does NOT
+    inherit from this Protocol — that would change the MRO for zero runtime
+    benefit — it exists so the implicit host coupling is written down and
+    reviewable in one place.
+    """
+
+    # -- config (ParsedConfig-backed) --
+    games: set
+    auto_detect_steam: bool
+    auto_detect_epic: bool
+    steam_library_paths: list
+    epic_library_paths: list
+    app_profiles: dict
+    protected_exact: set
+    protected_prefixes: tuple
+
+    # -- shared runtime state (RuntimeState-backed) --
+    _state_lock: threading.Lock
+    _stop_event: threading.Event
+    _library_scan_ready: threading.Event
+    _library_scan_thread: threading.Thread | None
+    _last_steam_scan: float
+    _last_epic_scan: float
+    _steam_games_cache: set
+    _epic_games_cache: set
+    _discovery_issues: list
+    _protected_cache: dict
+    # NOTE: host-seeded but PUBLISHED by this mixin — _get_processes rewrites
+    # it every poll cycle for TuningMixin's PID-reuse guards.
+    _process_create_times: dict
+
+    # -- SPI parsing scratch (Win32Scratch-backed) --
+    _spi_buffer: Any
+    _spi_buffer_size: Any
+    _spi_off_next: int
+    _spi_off_pid: int
+    _spi_off_name: int
+    _spi_off_create_time: int
+    _spi_ptr_size: int
+    _spi_struct_ulong: Any
+    _spi_struct_ushort: Any
+    _spi_struct_longlong: Any
+    _spi_struct_ptr: Any
+
+    # -- cross-mixin methods --
+    # BaseMixin
+    def _normalize_name(self, name): ...
+    def _log_once(self, key, message): ...
+    def _open_process(self, pid, access, quiet=False): ...
+    # TopologyMixin
+    def _filetime_to_int(self, value): ...
+
+
 class DiscoveryMixin:
+    """Process enumeration, game classification, and launcher library scans.
+
+    Host contract: DiscoveryHost (above) documents every attribute and
+    cross-mixin method this mixin consumes but does not assign.
+    """
+
     def _request_library_scan(self, force=False):
         """Kick off a Steam/Epic library scan on a background daemon thread.
 
