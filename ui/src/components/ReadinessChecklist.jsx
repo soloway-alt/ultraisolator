@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Tag, Tile } from '@carbon/react';
-import { requestJson } from '../utils/api.mjs';
+import { useBackendResource } from '../hooks/useBackendResource.js';
+import { translatedNotice } from '../utils/config.mjs';
 import { useI18n } from '../i18n.jsx';
 
 const CORE_CHECK_ORDER = [
@@ -50,41 +51,14 @@ export function ReadinessChecklist({ live }) {
   const { t } = useI18n();
   const gameMode = Boolean(live.snapshot?.status?.game_mode);
   const hiddenWindow = !live.visible && !gameMode;
-  const [payload, setPayload] = useState(null);
-  const [state, setState] = useState({
-    loading: true,
-    refreshing: false,
-    error: null
+  const enabled = live.visible && !gameMode;
+  const state = useBackendResource('/api/readiness', {
+    enabled,
+    refreshPath: '/api/readiness?refresh=1'
   });
-
-  const loadReadiness = useCallback(async (refresh = false) => {
-    if (!live.visible || gameMode) {
-      setPayload(null);
-      setState((current) => ({ ...current, loading: false, refreshing: false }));
-      return;
-    }
-    setState((current) => ({
-      ...current,
-      loading: !payload && !refresh,
-      refreshing: Boolean(refresh),
-      error: null
-    }));
-    try {
-      const nextPayload = await requestJson(`/api/readiness${refresh ? '?refresh=1' : ''}`);
-      setPayload(nextPayload);
-      setState({ loading: false, refreshing: false, error: null });
-    } catch (error) {
-      setState({
-        loading: false,
-        refreshing: false,
-        error: error instanceof Error ? error.message : t('readiness.loadError', 'Unable to load readiness')
-      });
-    }
-  }, [gameMode, live.visible, payload, t]);
-
-  useEffect(() => {
-    loadReadiness(false);
-  }, [gameMode, live.visible]);
+  // The paused panel must not show stale checks: while disabled the payload
+  // reads as absent, matching the old machine that cleared it on bail.
+  const payload = enabled ? state.data : null;
 
   const checks = Array.isArray(payload?.checks) ? payload.checks : [];
   const summary = payload?.summary || {};
@@ -115,7 +89,7 @@ export function ReadinessChecklist({ live }) {
           </div>
         </div>
         <div className="analysis-actions">
-          <button type="button" onClick={() => loadReadiness(true)} disabled={gameMode || state.loading || state.refreshing}>
+          <button type="button" onClick={state.reload} disabled={gameMode || state.loading || state.refreshing}>
             {state.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
           </button>
         </div>
@@ -123,7 +97,7 @@ export function ReadinessChecklist({ live }) {
 
       {gameMode ? <div className="settings-message">{t('readiness.pausedGame', 'Readiness checks paused during game mode')}</div> : null}
       {hiddenWindow ? <div className="settings-message">{t('readiness.pausedHidden', 'Readiness checks paused while the window is hidden')}</div> : null}
-      {state.error ? <div className="action-error">{state.error}</div> : null}
+      {state.error ? <div className="action-error">{translatedNotice(state.error, t)}</div> : null}
 
       <div className="readiness-summary">
         <div>
