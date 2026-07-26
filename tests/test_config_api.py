@@ -7,10 +7,10 @@ import threading
 import unittest
 from pathlib import Path
 
+from isolator.app import EsportsIsolatorPro
 from server.bridge import IsolatorBridge
 from server.config_store import DEFAULT_CONFIG, ConfigError, ConfigStore
 from server.http_api import create_handler, create_server
-from isolator.app import EsportsIsolatorPro
 
 
 class ConfigStoreTests(unittest.TestCase):

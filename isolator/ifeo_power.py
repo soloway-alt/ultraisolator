@@ -9,7 +9,6 @@ from .protected_state import (
 )
 from .winapi import *
 
-
 IFEO_STATE_VERSION = 2
 IFEO_STATE_OWNER = "EsportsIsolatorPRO"
 IFEO_BASE_PATH = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options"

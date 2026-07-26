@@ -3,7 +3,6 @@
 import os
 import time
 
-
 TARGET_DEVICE_CLASSES = {"Display", "SCSIAdapter", "Net", "HDC", "USB"}
 PCI_ENUM_PATH = r"SYSTEM\CurrentControlSet\Enum\PCI"
 MSI_PROPERTIES_SUBKEY = r"Device Parameters\Interrupt Management\MessageSignaledInterruptProperties"

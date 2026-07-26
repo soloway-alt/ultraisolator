@@ -1,11 +1,12 @@
 """Lifecycle bridge between the localhost API and EsportsIsolatorPro."""
 
-from contextlib import contextmanager
 import threading
 import time
+from contextlib import contextmanager
 
 from isolator.app import EsportsIsolatorPro
 from isolator.winapi import is_process_elevated
+
 from .analysis import build_analysis_payload
 from .config_store import ConfigStore
 from .log_store import read_log_payload

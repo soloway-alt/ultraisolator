@@ -1,9 +1,8 @@
 """Read-only log file tailing and parsing for the localhost API."""
 
-from pathlib import Path
 import os
 import re
-
+from pathlib import Path
 
 DEFAULT_LOG_LIMIT = 500
 MAX_LOG_LIMIT = 1000

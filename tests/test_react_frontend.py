@@ -2,7 +2,6 @@ import json
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "ui"
 SRC = UI / "src"
@@ -369,16 +368,16 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".notification-history-drawer", styles)
 
     def test_dashboard_has_system_analysis_widget(self):
-        app = (SRC / "App.jsx").read_text(encoding="utf-8")
         dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
         analysis_path = SRC / "components" / "SystemAnalysis.jsx"
         self.assertTrue(analysis_path.exists())
         analysis = analysis_path.read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
-        self.assertIn("SystemAnalysis", app)
-        self.assertIn("from './components/SystemAnalysis.jsx'", app)
+        # Dashboard is the consumer; App.jsx routes pages and must not carry
+        # a direct SystemAnalysis import.
         self.assertIn("SystemAnalysis", dashboard)
+        self.assertIn("from '../components/SystemAnalysis.jsx'", dashboard)
         self.assertIn("/api/analysis", analysis)
         self.assertIn("Setup quality", analysis)
         self.assertIn("Setup score", analysis)

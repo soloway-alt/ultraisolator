@@ -16,7 +16,6 @@ import { SettingsPage } from './pages/Settings.jsx';
 import { TopologyPage } from './pages/Topology.jsx';
 import { LogsPage } from './pages/Logs.jsx';
 import { AdvancedToolsPage } from './pages/AdvancedTools.jsx';
-import { SystemAnalysis } from './components/SystemAnalysis.jsx';
 import { NotificationCenter } from './components/NotificationCenter.jsx';
 import { FirstRunWizard } from './components/FirstRunWizard.jsx';
 import { I18nProvider, useI18n } from './i18n.jsx';

@@ -9,7 +9,6 @@ from isolator.app import EsportsIsolatorPro
 from isolator.winapi import ABOVE_NORMAL_PRIORITY_CLASS
 from server.config_store import ConfigError
 
-
 STEAM_RUNTIME_NAMES = (
     "steam.exe",
     "steamwebhelper.exe",

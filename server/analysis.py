@@ -85,7 +85,6 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
 
     summary = topology.get("summary", {}) if isinstance(topology, dict) else {}
     partitions = topology.get("partitions", {}) if isinstance(topology, dict) else {}
-    partition_status = status.get("cpu_partitions", {}) if isinstance(status, dict) else {}
     capability_warnings = _capability_warnings(status)
     reported_failure_count = int(status.get("reported_failure_count", 0) or 0)
 

@@ -218,10 +218,6 @@ const TOPOLOGY = {
   refresh: { blocked_reason: null }
 };
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
 async function installRendererMock(page, options = {}) {
   await page.addInitScript(({ mockOptions }) => {
     const appSettings = mockOptions.appSettings;

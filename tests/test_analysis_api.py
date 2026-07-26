@@ -5,9 +5,9 @@ import threading
 import unittest
 from pathlib import Path
 
+from server.analysis import build_analysis_payload
 from server.bridge import IsolatorBridge
 from server.http_api import create_handler, create_server
-from server.analysis import build_analysis_payload
 
 
 class FakeAnalysisEngine:

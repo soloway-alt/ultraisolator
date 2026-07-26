@@ -2,7 +2,6 @@
 
 from .winapi import *
 
-
 _CAPABILITY_METADATA = {
     "Administrator rights not detected: HKLM IFEO writes are disabled.": (
         "administrator_required", "error"

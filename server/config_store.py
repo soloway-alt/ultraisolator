@@ -6,7 +6,6 @@ import os
 import tempfile
 import threading
 
-
 DEFAULT_CONFIG = {
     "games": [
         "cs2.exe", "valorant.exe", "arcraiders.exe", "pioneergame.exe", "arcraiders-win64-shipping.exe",
@@ -311,7 +310,7 @@ class ConfigStore:
                     parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"Invalid numeric constant: {value}")),
                 )
             except ValueError as exc:
-                raise ConfigError([{"field": "$", "message": f"config file must be valid JSON: {exc}"}])
+                raise ConfigError([{"field": "$", "message": f"config file must be valid JSON: {exc}"}]) from exc
         if not isinstance(loaded, dict):
             raise ConfigError([{"field": "$", "message": "config file must contain a JSON object."}])
         return loaded, True

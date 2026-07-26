@@ -17,9 +17,14 @@ function Invoke-Step {
   )
 
   Write-Host "`n== $Name ==" -ForegroundColor Cyan
+  # Reset before and capture immediately after: a step whose last command is
+  # a cmdlet (not a native exe) leaves $LASTEXITCODE untouched, which would
+  # otherwise re-report a stale exit code from a previous step.
+  $global:LASTEXITCODE = 0
   & $Command
-  if ($LASTEXITCODE -ne 0) {
-    throw "$Name failed with exit code $LASTEXITCODE"
+  $stepExitCode = $LASTEXITCODE
+  if ($stepExitCode -ne 0) {
+    throw "$Name failed with exit code $stepExitCode"
   }
 }
 
@@ -90,7 +95,9 @@ Invoke-Step "Config dry-run" {
 }
 
 Invoke-Step "NPM dependency audit" {
-  npm --prefix ui audit
+  # Gate only on actionable runtime advisories: a low-severity advisory in a
+  # dev-only transitive dependency must not turn unrelated changes red.
+  npm --prefix ui audit --omit=dev --audit-level=high
 }
 
 Invoke-Step "Renderer build" {

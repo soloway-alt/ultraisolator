@@ -1,15 +1,14 @@
 import http.client
-import io
 import json
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
-from server.log_store import read_log_payload
 from server.bridge import IsolatorBridge
 from server.http_api import create_handler, create_server
+from server.log_store import read_log_payload
 
 
 class LogApiTests(unittest.TestCase):

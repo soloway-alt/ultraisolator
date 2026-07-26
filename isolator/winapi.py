@@ -1,6 +1,5 @@
 import atexit
 import ctypes
-from ctypes import wintypes
 import gc
 import json
 import os
@@ -10,6 +9,7 @@ import sys
 import threading
 import time
 import winreg
+from ctypes import wintypes
 
 from .protected_state import default_protected_state_dir
 
@@ -112,8 +112,8 @@ IFEO_DENIED_EXES = frozenset({
     "explorer.exe", "conhost.exe", "runtimebroker.exe", "ctfmon.exe",
     "sihost.exe", "taskhostex.exe", "dllhost.exe", "wmiprvse.exe",
     "searchindexer.exe", "searchhost.exe", "startmenuexperiencehost.exe",
-    "shellexperiencehost.exe", "winlogon.exe", "logonui.exe", "userinit.exe",
-    "wininit.exe", "wudfhost.exe", "memcompression", "secure system",
+    "shellexperiencehost.exe", "logonui.exe", "userinit.exe",
+    "wudfhost.exe", "memcompression", "secure system",
     "registry.exe", "ntoskrnl.exe", "msdtc.exe", "trustedinstaller.exe",
     "wlms.exe",
 })

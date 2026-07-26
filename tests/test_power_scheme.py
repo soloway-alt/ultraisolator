@@ -4,7 +4,6 @@ from pathlib import Path
 from isolator.ifeo_power import IfeoPowerMixin
 from isolator.winapi import HIGH_PERFORMANCE_GUID, ULTIMATE_PERFORMANCE_GUID, make_guid
 
-
 BALANCED_GUID = (0x381B4222, 0xF694, 0x41F0, (0x96, 0x85, 0xFF, 0x5B, 0xB2, 0x60, 0xDF, 0x2E))
 CUSTOM_GUID = (0xAAAAAAAA, 0xBBBB, 0xCCCC, (1, 2, 3, 4, 5, 6, 7, 8))
 

@@ -2,7 +2,6 @@
 
 from .winapi import *
 
-
 _PROFILE_PRIORITY_CLASSES = {
     "idle": IDLE_PRIORITY_CLASS,
     "below_normal": BELOW_NORMAL_PRIORITY_CLASS,
@@ -436,7 +435,7 @@ class TuningMixin:
 
     def _restore_process(self, pid, deferred_jail_removals=None):
         pid = int(pid)
-        
+
         with self._state_lock:
             entry = self._touched.get(pid)
             if not entry:
@@ -490,7 +489,7 @@ class TuningMixin:
                     if current is not None and current.get("gen", 0) == original_entry_gen:
                         self._touched.pop(pid, None)
                 return False
-                
+
             self._restore_threads_for_process(pid)
 
             restored_attrs = []
@@ -797,9 +796,9 @@ class TuningMixin:
                 self._set_process_io_priority(handle, IO_PRIORITY_NORMAL)
             except OSError:
                 pass
-            
+
             # Disabled _tune_hot_threads to prevent massive FPS micro-stutters
-            
+
             if is_game:
                 self._log(f"[FOCUS] Boosted foreground game: {name}")
             return True
@@ -811,10 +810,10 @@ class TuningMixin:
 
     def _boost_system_critical(self):
         critical_services = {
-            "dwm.exe", 
-            "audiodg.exe", 
-            "nvcontainer.exe", 
-            "nvsphelper64.exe", 
+            "dwm.exe",
+            "audiodg.exe",
+            "nvcontainer.exe",
+            "nvsphelper64.exe",
             "amdrsserv.exe"
         }
         current_critical_pids = set()
@@ -1041,9 +1040,9 @@ class TuningMixin:
                 self._set_process_io_priority(handle, IO_PRIORITY_NORMAL)
             except OSError as e:
                 self._log_once(("io_prio", pid), f"[WARN] IoPriority failed: {e}")
-            
+
             # Disabled _tune_hot_threads to prevent massive FPS micro-stutters
-            
+
             self._log(f"[GAME] Optimized running game: {name} (pid={pid})")
             return "applied"
         except OSError as exc:

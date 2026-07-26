@@ -11,7 +11,6 @@ import secrets
 import subprocess
 import tempfile
 
-
 PROTECTED_STATE_VERSION = 2
 PROTECTED_STATE_APP_DIR = "EsportsIsolatorPRO"
 PROTECTED_STATE_KEY_FILE = "recovery-state.hmac.key"

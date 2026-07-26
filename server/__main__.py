@@ -8,9 +8,9 @@ import sys
 import threading
 
 from isolator.winapi import is_process_elevated
+
 from .bridge import IsolatorBridge
 from .http_api import create_handler, create_server
-
 
 PARENT_HEARTBEAT_INTERVAL_S = 5.0
 
@@ -18,7 +18,6 @@ PARENT_HEARTBEAT_INTERVAL_S = 5.0
 def _parent_alive_windows(parent_pid, interval_s):
     synchronize = 0x00100000
     wait_timeout = 0x00000102
-    wait_object_0 = 0x00000000
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     handle = kernel32.OpenProcess(synchronize, False, int(parent_pid))
     if not handle:

@@ -106,7 +106,7 @@ export function FirstRunWizard({ live }) {
       }
       try {
         await completeFirstRun();
-      } catch (err) {
+      } catch (_err) {
         setError(t('firstRun.completionError', 'Profile applied, but setup completion could not be saved. Retry to finish setup.'));
       }
     } catch (err) {

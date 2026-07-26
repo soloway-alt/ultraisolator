@@ -9,12 +9,16 @@ This project changes Windows process scheduling behavior, so contributions need 
 ```powershell
 git clone https://github.com/chezzof/ultraisolator.git
 cd ultraisolator
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
 copy config.json.example config.json
 python -m unittest discover -s tests -p "test_*.py" -v
+ruff check .
+mypy
 npm --prefix ui install
 npm --prefix ui run build:renderer
 npm --prefix ui run smoke
+npm --prefix ui run lint
+npm --prefix ui run test:unit
 ```
 
 ## Development workflow
@@ -30,8 +34,8 @@ npm --prefix ui run smoke
 
 - Explain the user-visible behavior change.
 - Include Windows version, Python version, and game/test context when relevant.
-- Run `python -m unittest discover -s tests -p "test_*.py" -v`.
-- For UI changes, run `npm --prefix ui run build:renderer` and `npm --prefix ui run smoke`.
+- Run `python -m unittest discover -s tests -p "test_*.py" -v`, `ruff check .`, and `mypy`.
+- For UI changes, run `npm --prefix ui run build:renderer`, `npm --prefix ui run smoke`, `npm --prefix ui run lint`, `npm --prefix ui run lint:css`, and `npm --prefix ui run test:unit`; for renderer-visible changes also `npm --prefix ui run test:ui-quality`.
 - For packaging changes, run `npm --prefix ui run build` or explain why local packaging was not available.
 - Keep refactors focused and separate from behavior changes.
 

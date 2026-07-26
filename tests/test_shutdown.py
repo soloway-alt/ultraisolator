@@ -1,5 +1,4 @@
 import contextlib
-import json
 import os
 import tempfile
 import threading

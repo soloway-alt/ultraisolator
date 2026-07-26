@@ -5,14 +5,14 @@ import os
 import sys
 from dataclasses import dataclass, field
 
-from .winapi import *
 from .base import BaseMixin
 from .discovery import DiscoveryMixin
 from .ifeo_power import IfeoPowerMixin
 from .recovery import RecoveryMixin
+from .runtime import RuntimeMixin
 from .topology import TopologyMixin
 from .tuning import TuningMixin
-from .runtime import RuntimeMixin
+from .winapi import *
 
 
 @dataclass
@@ -408,7 +408,7 @@ class EsportsIsolatorPro(
         jailed_count = 0
         foreground_count = 0
         optimized_game_count = 0
-        for pid, name, source in touched_entries:
+        for _pid, _name, source in touched_entries:
             if source == "jail":
                 jailed_count += 1
             elif source == "foreground":

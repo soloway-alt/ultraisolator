@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from isolator.base import BaseMixin, _CAPABILITY_METADATA
+from isolator.base import _CAPABILITY_METADATA, BaseMixin
 
 
 class _CapabilityRecorder(BaseMixin):

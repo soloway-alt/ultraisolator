@@ -245,7 +245,7 @@ class RuntimeMixin:
                 if _stop_event.wait(next_interval):
                     break
                 continue
-                
+
             cleanup_due = now - last_cleanup > 60.0
             current_game_pids = set()
             cleanup_ran = False
@@ -273,7 +273,7 @@ class RuntimeMixin:
                 for pid in confirmed_closed:
                     self._restore_process(pid)
                     self._log(f"[GAME] Game closed: pid={pid}")
-                
+
                 if current_game_pids:
                     last_game_exit_time = 0.0
                     if not game_was_running:
@@ -341,14 +341,14 @@ class RuntimeMixin:
                         if switched and self._power_plan_active:
                             self._refresh_topology("power_scheme_switch")
                         power_scheme_attempted = True
-                        
+
                 elif not current_game_pids:
                     if game_was_running:
                         if pending_closed:
                             last_game_exit_time = 0.0
                         elif last_game_exit_time == 0.0:
                             last_game_exit_time = now
-                            
+
                         if now - last_game_exit_time > self.game_exit_restore_delay_s:
                             game_was_running = False
                             self._log("==================================================")
@@ -358,7 +358,7 @@ class RuntimeMixin:
                             )
                             self._restore_all_processes()
                             self._log("==================================================")
-                            
+
                             if gc_disabled:
                                 gc.enable()
                                 gc.collect()

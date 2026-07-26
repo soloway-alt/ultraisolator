@@ -1,14 +1,14 @@
-import os
 import json
+import os
 import subprocess
 import tempfile
 import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+from isolator import protected_state
 from isolator.app import EsportsIsolatorPro
 from isolator.ifeo_power import IFEO_STATE_OWNER, IFEO_STATE_VERSION, IfeoPowerMixin
-from isolator import protected_state
 from isolator.protected_state import write_protected_state_file
 from isolator.recovery import RecoveryMixin
 from isolator.winapi import HIGH_PERFORMANCE_GUID, IFEO_VALUES, make_guid

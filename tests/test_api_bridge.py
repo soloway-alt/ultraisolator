@@ -1,5 +1,5 @@
-import http.client
 import contextlib
+import http.client
 import io
 import json
 import os
@@ -10,10 +10,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from isolator.app import EsportsIsolatorPro
-from server.__main__ import _parent_heartbeat_loop, main as server_main
+from server.__main__ import _parent_heartbeat_loop
+from server.__main__ import main as server_main
 from server.bridge import AdministratorRequired, BridgeConflict, IsolatorBridge
 from server.http_api import create_handler, create_server
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

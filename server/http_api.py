@@ -10,7 +10,6 @@ from urllib.parse import parse_qs, urlparse
 from .bridge import AdministratorRequired, BridgeConflict
 from .config_store import ConfigError
 
-
 _LOGGER = logging.getLogger("server.http_api")
 
 
@@ -218,8 +217,8 @@ def create_handler(bridge, api_token=None):
                     raw.decode("utf-8"),
                     parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"Invalid numeric constant: {value}")),
                 )
-            except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
-                raise ConfigError([{"field": "$", "message": "Request body must be valid JSON."}])
+            except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+                raise ConfigError([{"field": "$", "message": "Request body must be valid JSON."}]) from exc
 
         @staticmethod
         def _bool_query(parsed, name):
