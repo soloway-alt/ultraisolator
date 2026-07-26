@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
-import { requestJson } from '../utils/api.js';
+import { requestJson } from '../utils/api.mjs';
 import { useI18n } from '../i18n.jsx';
 
 function checkTone(status) {

@@ -124,6 +124,26 @@ test.describe('renderer visual regression', () => {
     });
   });
 
+  test('Logs activity viewer', async ({ page }) => {
+    await gotoMockedRenderer(page, '#logs');
+    await waitForAppReady(page, '.logs-page');
+    await expect(page.locator('.log-table tbody tr')).toHaveCount(4);
+    await expect(page.locator('.main-content')).toHaveScreenshot('logs-activity-viewer.png', {
+      animations: 'disabled',
+      // The Last Refresh KPI renders the wall-clock load time.
+      mask: [page.locator('.logs-summary-grid .kpi-cell:nth-child(4)')]
+    });
+  });
+
+  test('Advanced tools MSI viewer', async ({ page }) => {
+    await gotoMockedRenderer(page, '#advanced');
+    await waitForAppReady(page, '.advanced-tools-page');
+    await expect(page.locator('.msi-table tbody tr')).toHaveCount(3);
+    await expect(page.locator('.main-content')).toHaveScreenshot('advanced-tools-msi.png', {
+      animations: 'disabled'
+    });
+  });
+
   test('backend-unavailable Dashboard error state', async ({ page }) => {
     await gotoMockedRenderer(page, '#dashboard', { backendUnavailable: true });
     await waitForAppReady(page, '.dashboard-profile-hero');

@@ -1989,6 +1989,7 @@ body {
 .analysis-check .cds--tag,
 .readiness-check .cds--tag,
 .msi-table .cds--tag,
+.log-table .cds--tag,
 .status-row .cds--tag,
 .page-heading .cds--tag {
   min-height: 24px;
@@ -2015,14 +2016,16 @@ body {
 
 .analysis-check .cds--tag--yellow,
 .readiness-check .cds--tag--yellow,
-.msi-table .cds--tag--yellow {
+.msi-table .cds--tag--yellow,
+.log-table .cds--tag--yellow {
   border-color: rgba(255, 184, 0, 0.42);
   background: rgba(255, 184, 0, 0.1);
   color: var(--eii-warning);
 }
 
 .analysis-check .cds--tag--red,
-.readiness-check .cds--tag--red {
+.readiness-check .cds--tag--red,
+.log-table .cds--tag--red {
   border-color: rgba(255, 71, 87, 0.48);
   background: rgba(255, 71, 87, 0.12);
   color: var(--eii-alert);

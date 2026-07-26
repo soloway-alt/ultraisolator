@@ -1,8 +1,8 @@
 import { useDeferredValue, useMemo, useState } from 'react';
 import { Tile } from '@carbon/react';
-import { PRIORITY_CLASS_LABELS, PROCESS_FILTERS } from '../constants/processes.js';
+import { PRIORITY_CLASS_LABELS, PROCESS_FILTERS } from '../constants/processes.mjs';
 import { useI18n } from '../i18n.jsx';
-import { formatCpuSets, formatPriorityClass } from '../utils/format.js';
+import { formatCpuSets, formatPriorityClass } from '../utils/format.mjs';
 import { ProcessStatusBadge } from './ProcessStatusBadge.jsx';
 
 function processMatchesFilter(process, filter) {

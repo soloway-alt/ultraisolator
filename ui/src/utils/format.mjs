@@ -1,5 +1,5 @@
-import { PRIORITY_CLASS_LABELS } from '../constants/processes.js';
-import { EFFICIENCY_LABELS } from '../constants/topology.js';
+import { PRIORITY_CLASS_LABELS } from '../constants/processes.mjs';
+import { EFFICIENCY_LABELS } from '../constants/topology.mjs';
 
 export function formatTimerResolution(value) {
   if (typeof value !== 'number' || value <= 0) {

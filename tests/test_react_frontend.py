@@ -44,9 +44,9 @@ class ReactFrontendContractTests(unittest.TestCase):
     def test_renderer_is_split_into_pages_components_constants_and_utils(self):
         expected_files = (
             "constants/navigation.js",
-            "constants/processes.js",
-            "constants/settings.js",
-            "constants/topology.js",
+            "constants/processes.mjs",
+            "constants/settings.mjs",
+            "constants/topology.mjs",
             "components/ErrorBoundary.jsx",
             "components/KpiCell.jsx",
             "components/PageHeading.jsx",
@@ -54,9 +54,9 @@ class ReactFrontendContractTests(unittest.TestCase):
             "pages/Dashboard.jsx",
             "pages/Settings.jsx",
             "pages/Topology.jsx",
-            "utils/appSettings.js",
-            "utils/config.js",
-            "utils/format.js",
+            "utils/appSettings.mjs",
+            "utils/config.mjs",
+            "utils/format.mjs",
             "utils/lifecycle.js",
             "utils/topology.js",
         )
@@ -104,7 +104,7 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_dashboard_has_process_table_filters_and_columns(self):
         table = (SRC / "components" / "ProcessTable.jsx").read_text(encoding="utf-8")
-        process_constants = (SRC / "constants" / "processes.js").read_text(encoding="utf-8")
+        process_constants = (SRC / "constants" / "processes.mjs").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("function ProcessTable", table)
@@ -127,9 +127,9 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_settings_has_config_editor_and_app_settings(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
-        settings_constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
-        app_settings = (SRC / "utils" / "appSettings.js").read_text(encoding="utf-8")
-        config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
+        settings_constants = (SRC / "constants" / "settings.mjs").read_text(encoding="utf-8")
+        app_settings = (SRC / "utils" / "appSettings.mjs").read_text(encoding="utf-8")
+        config_utils = (SRC / "utils" / "config.mjs").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("function SettingsPage", settings)
@@ -209,7 +209,7 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_settings_has_per_app_profiles_crud_editor(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
-        config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
+        config_utils = (SRC / "utils" / "config.mjs").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("App-specific rules", settings)
@@ -225,7 +225,7 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_first_run_wizard_applies_presets_and_tracks_completion(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
-        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+        constants = (SRC / "constants" / "settings.mjs").read_text(encoding="utf-8")
         app_settings = (SRC / "state" / "AppSettingsContext.jsx").read_text(encoding="utf-8")
         wizard_path = SRC / "components" / "FirstRunWizard.jsx"
         self.assertTrue(wizard_path.exists())
@@ -260,7 +260,7 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_settings_can_apply_config_presets_after_first_run(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
-        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+        constants = (SRC / "constants" / "settings.mjs").read_text(encoding="utf-8")
 
         self.assertIn("Session profiles", settings)
         self.assertIn("applyPresetToDraft", settings)
@@ -348,7 +348,7 @@ class ReactFrontendContractTests(unittest.TestCase):
         hook = hook_path.read_text(encoding="utf-8")
         center = center_path.read_text(encoding="utf-8")
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
-        app_settings = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+        app_settings = (SRC / "constants" / "settings.mjs").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("NotificationCenter", app)
@@ -438,7 +438,7 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertNotIn("/api/status", hook)
 
     def test_config_validation_rejects_blank_numeric_fields(self):
-        config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
+        config_utils = (SRC / "utils" / "config.mjs").read_text(encoding="utf-8")
 
         self.assertIn("is required", config_utils)
         self.assertIn("if (!text)", config_utils)
@@ -449,7 +449,7 @@ class ReactFrontendContractTests(unittest.TestCase):
         hook = (SRC / "hooks" / "useLiveSnapshot.js").read_text(encoding="utf-8")
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
         topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
-        api_path = SRC / "utils" / "api.js"
+        api_path = SRC / "utils" / "api.mjs"
         self.assertTrue(api_path.exists())
         api = api_path.read_text(encoding="utf-8")
 
@@ -468,9 +468,9 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertNotIn("resolveBackendUrl", app)
         self.assertNotIn("resolveBackendUrl", hook)
         self.assertNotIn("resolveBackendToken", hook)
-        self.assertNotIn("from '../utils/api.js'", hook)
-        self.assertIn("from '../utils/api.js'", settings)
-        self.assertIn("from '../utils/api.js'", topology)
+        self.assertNotIn("from '../utils/api.mjs'", hook)
+        self.assertIn("from '../utils/api.mjs'", settings)
+        self.assertIn("from '../utils/api.mjs'", topology)
 
     def test_locales_are_split_and_primary_copy_uses_plain_language(self):
         i18n = (SRC / "i18n.jsx").read_text(encoding="utf-8")

@@ -15,6 +15,7 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("electron", package["devDependencies"])
         self.assertIn("react", package["dependencies"])
         self.assertIn("backend-runtime.js", package["build"]["files"])
+        self.assertIn("shared/**/*", package["build"]["files"])
         for group_name in ("dependencies", "devDependencies"):
             for name, version in package[group_name].items():
                 self.assertNotRegex(version, r"^[~^>=<*]", f"{name} should be pinned")
@@ -130,7 +131,12 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("ipcMain.handle('backend:request'", main)
         self.assertIn("ipcMain.handle('live:start'", main)
         self.assertIn("ipcMain.handle('live:stop'", main)
-        self.assertIn("const BACKEND_OPERATION_ALLOWLIST", main)
+        self.assertIn("BACKEND_OPERATION_ALLOWLIST", main)
+        self.assertIn("require('./shared/backend-operations.mjs')", main)
+        shared = (UI / "shared" / "backend-operations.mjs").read_text(encoding="utf-8")
+        self.assertIn("export const BACKEND_OPERATIONS = Object.freeze", shared)
+        self.assertIn("export const ROUTE_INDEX", shared)
+        self.assertIn("'logs.get': Object.freeze({ method: 'GET', path: '/api/logs', integerParam: 'limit', min: 1, max: 500 })", shared)
         self.assertIn("function resolveBackendOperation", main)
         self.assertIn("function assertTrustedIpcSender", main)
         self.assertIn("event.senderFrame", main)

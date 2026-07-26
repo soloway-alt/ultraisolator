@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AppSettingsStore } from '../src/state/AppSettingsStore.mjs';
+import {
+  normalizeAppSettings as normalizeSettings,
+  normalizeAppSettingsPatch as normalizePatch
+} from '../src/utils/appSettings.mjs';
 
 const defaults = {
   settingsVersion: 3,
@@ -11,19 +15,6 @@ const defaults = {
   notificationToastsEnabled: true,
   firstRunCompleted: false
 };
-
-function normalizeSettings(value = {}) {
-  return {
-    ...defaults,
-    ...value,
-    language: value.language === 'ru' ? 'ru' : 'en',
-    revision: Number(value.revision || 0)
-  };
-}
-
-function normalizePatch(value = {}) {
-  return Object.fromEntries(Object.entries(value).filter(([key]) => key in defaults && key !== 'revision' && key !== 'settingsVersion'));
-}
 
 function deferred() {
   let resolve;

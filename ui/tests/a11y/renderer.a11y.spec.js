@@ -31,4 +31,14 @@ test.describe('renderer accessibility smoke', () => {
     await gotoMockedRenderer(page, '#topology');
     await expectNoA11yViolations(page, '.topology-map');
   });
+
+  test('Logs has no axe violations', async ({ page }) => {
+    await gotoMockedRenderer(page, '#logs');
+    await expectNoA11yViolations(page, '.logs-page');
+  });
+
+  test('Advanced Tools has no axe violations', async ({ page }) => {
+    await gotoMockedRenderer(page, '#advanced');
+    await expectNoA11yViolations(page, '.advanced-tools-page');
+  });
 });

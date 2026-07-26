@@ -1,4 +1,4 @@
-import { requestJson } from './api.js';
+import { requestJson } from './api.mjs';
 
 export async function postLifecycleAction(action) {
   const payload = await requestJson(`/api/${action}`, { method: 'POST' });

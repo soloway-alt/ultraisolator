@@ -4,7 +4,7 @@ import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
 import { useI18n } from '../i18n.jsx';
-import { requestJson } from '../utils/api.js';
+import { requestJson } from '../utils/api.mjs';
 
 function msiLabel(value, t) {
   if (value === true) {

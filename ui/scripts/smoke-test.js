@@ -167,7 +167,7 @@ async function main() {
   assert(!styles.includes('unknown'), 'User-facing stylesheet state labels should avoid unknown/debug vocabulary.');
   const electronMain = fs.readFileSync(path.join(UI_ROOT, 'electron-main.js'), 'utf8');
   const appSource = fs.readFileSync(path.join(UI_ROOT, 'src', 'App.jsx'), 'utf8');
-  const settingsConstants = fs.readFileSync(path.join(UI_ROOT, 'src', 'constants', 'settings.js'), 'utf8');
+  const settingsConstants = fs.readFileSync(path.join(UI_ROOT, 'src', 'constants', 'settings.mjs'), 'utf8');
   assert(electronMain.includes('minimizeToTrayOnStart: false'), 'Electron must open the dashboard on startup by default.');
   assert(settingsConstants.includes('minimizeToTrayOnStart: false'), 'Renderer app settings must default to opening the dashboard on startup.');
   assert(settingsConstants.includes("language: 'en'"), 'Renderer app settings must include a persisted language preference.');

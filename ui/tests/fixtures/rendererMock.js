@@ -2,8 +2,7 @@ const DEFAULT_APP_SETTINGS = {
   language: 'en',
   launchAtWindowsStartup: false,
   minimizeToTrayOnStart: false,
-  startIsolatorAutomatically: false,
-  notificationToastsEnabled: false,
+  notificationToastsEnabled: true,
   firstRunCompleted: true
 };
 
@@ -25,8 +24,6 @@ const DEFAULT_CONFIG = {
     }
   ],
   housekeeping_cores: 2,
-  hot_thread_limit: 4,
-  thread_sample_window_ms: 250,
   poll_interval_idle_ms: 1000,
   poll_interval_active_ms: 2000,
   enable_background_jailing: false,
@@ -40,8 +37,6 @@ const DEFAULT_CONFIG = {
   gc_full_collect_interval_s: 1800,
   maintenance_skip_after_quiet_cycles: 3,
   log_file: '',
-  enable_hot_thread_tuning: false,
-  hot_thread_refresh_ms: 1000,
   anti_cheat_mode: 'conservative',
   event_backend: 'poll',
   allow_mmcss_injection: false,
@@ -61,8 +56,6 @@ const CONFIG_SCHEMA = {
     restart_required: true
   },
   housekeeping_cores: { type: 'int', min: 1, max: 16, restart_required: true },
-  hot_thread_limit: { type: 'int', min: 1, max: 64, restart_required: true },
-  thread_sample_window_ms: { type: 'int', min: 50, max: 5000, restart_required: true },
   poll_interval_idle_ms: { type: 'int', min: 50, max: 60000, restart_required: true },
   poll_interval_active_ms: { type: 'int', min: 50, max: 30000, restart_required: true },
   enable_background_jailing: { type: 'bool', restart_required: true },
@@ -76,8 +69,6 @@ const CONFIG_SCHEMA = {
   gc_full_collect_interval_s: { type: 'float', min: 60, max: 86400, restart_required: true },
   maintenance_skip_after_quiet_cycles: { type: 'int', min: 0, max: 100, restart_required: true },
   log_file: { type: 'string', restart_required: true },
-  enable_hot_thread_tuning: { type: 'bool', restart_required: true },
-  hot_thread_refresh_ms: { type: 'int', min: 250, max: 60000, restart_required: true },
   anti_cheat_mode: { type: 'choice', choices: ['aggressive', 'conservative'], restart_required: true },
   event_backend: { type: 'choice', choices: ['poll'], restart_required: true },
   allow_mmcss_injection: { type: 'bool', restart_required: true },
@@ -196,6 +187,89 @@ const CORES = Array.from({ length: 8 }, (_item, index) => {
   };
 });
 
+// Mirrors server/msi.py build_msi_payload.
+const MSI = {
+  ok: true,
+  available: true,
+  reason: null,
+  readonly: true,
+  restart_required: true,
+  summary: { total: 3, enabled: 1, disabled: 1, unknown: 1 },
+  devices: [
+    {
+      instance_id: 'PCI\\VEN_10DE&DEV_2684&SUBSYS_167C10DE&REV_A1\\4&2283f625&0&0019',
+      name: 'NVIDIA GeForce RTX 4090',
+      device_class: 'Display',
+      msi_enabled: true,
+      message_limit: 16
+    },
+    {
+      instance_id: 'PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086&REV_03\\3&11583659&0&FE',
+      name: 'Intel(R) Ethernet Controller I225-V',
+      device_class: 'Net',
+      msi_enabled: false,
+      message_limit: null
+    },
+    {
+      instance_id: 'PCI\\VEN_1022&DEV_43F7&SUBSYS_33061B21&REV_01\\5&2c0cb4b3&0&280010',
+      name: 'PCI device',
+      device_class: 'PCI device',
+      msi_enabled: null,
+      message_limit: null
+    }
+  ],
+  cache: { hit: false, ttl_s: 300, generated_at: 1710000000 }
+};
+
+// Mirrors server/log_store.py read_log_payload.
+const LOGS = {
+  ok: true,
+  available: true,
+  path: 'isolator.log',
+  reason: null,
+  limit: 500,
+  size: 4096,
+  modified_time: 1710000005,
+  entries: [
+    {
+      line: 41,
+      timestamp: '2024-03-09 17:20:01',
+      severity: 'info',
+      category: 'game',
+      tag: 'INFO',
+      message: 'Game detected: cs2.exe (pid 4242)',
+      raw: '2024-03-09 17:20:01 [INFO] Game detected: cs2.exe (pid 4242)'
+    },
+    {
+      line: 42,
+      timestamp: '2024-03-09 17:20:02',
+      severity: 'info',
+      category: 'timer',
+      tag: 'INFO',
+      message: 'Timer resolution applied: 0.5 ms',
+      raw: '2024-03-09 17:20:02 [INFO] Timer resolution applied: 0.5 ms'
+    },
+    {
+      line: 43,
+      timestamp: '2024-03-09 17:20:03',
+      severity: 'warning',
+      category: 'jail',
+      tag: 'WARN',
+      message: 'Background jailing is disabled by profile',
+      raw: '2024-03-09 17:20:03 [WARN] Background jailing is disabled by profile'
+    },
+    {
+      line: 44,
+      timestamp: '2024-03-09 17:20:04',
+      severity: 'error',
+      category: 'power',
+      tag: 'ERROR',
+      message: 'Power scheme switch failed: access denied',
+      raw: '2024-03-09 17:20:04 [ERROR] Power scheme switch failed: access denied'
+    }
+  ]
+};
+
 const TOPOLOGY = {
   ok: true,
   available: true,
@@ -227,6 +301,8 @@ async function installRendererMock(page, options = {}) {
     const analysis = mockOptions.analysis;
     const readiness = mockOptions.readiness;
     const topology = mockOptions.topology;
+    const msi = mockOptions.msi;
+    const logs = mockOptions.logs;
     const listeners = new Set();
     const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -261,8 +337,10 @@ async function installRendererMock(page, options = {}) {
           return clone(analysis);
         case 'readiness.get':
           return clone(readiness);
+        case 'msi.get':
+          return clone(msi);
         case 'logs.get':
-          return { ok: true, available: true, lines: [] };
+          return clone(logs);
         case 'lifecycle.start':
         case 'lifecycle.stop':
         case 'lifecycle.recover':
@@ -302,7 +380,9 @@ async function installRendererMock(page, options = {}) {
       snapshot: SNAPSHOT,
       analysis: ANALYSIS,
       readiness: READINESS,
-      topology: TOPOLOGY
+      topology: TOPOLOGY,
+      msi: MSI,
+      logs: LOGS
     }
   });
 }

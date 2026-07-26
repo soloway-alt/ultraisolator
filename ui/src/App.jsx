@@ -92,7 +92,10 @@ function AppShell() {
       </SideNav>
 
       <ErrorBoundary>
-        <Content className="main-content">
+        {/* tabIndex keeps the scrollable content region keyboard-scrollable
+            even when a page (e.g. read-only viewers paused in game mode) has
+            no enabled interactive controls. */}
+        <Content className="main-content" tabIndex={0}>
           <ActivePage page={activePage} live={live} />
         </Content>
         <NotificationCenter live={live} />

@@ -78,20 +78,9 @@ const FALLBACK_PYTHON_COMMANDS = ['py', 'python3'];
 const backendApiToken = crypto.randomBytes(32).toString('hex');
 const MAX_PROXY_BODY_BYTES = 64 * 1024;
 const LIVE_RECONNECT_DELAY_MS = 1500;
-const BACKEND_OPERATION_ALLOWLIST = Object.freeze({
-  'status.get': { method: 'GET', path: '/api/status' },
-  'config.defaults.get': { method: 'GET', path: '/api/config/defaults' },
-  'config.get': { method: 'GET', path: '/api/config' },
-  'config.update': { method: 'PUT', path: '/api/config', body: true },
-  'topology.get': { method: 'GET', path: '/api/topology', booleanParam: 'refresh' },
-  'analysis.get': { method: 'GET', path: '/api/analysis' },
-  'readiness.get': { method: 'GET', path: '/api/readiness', booleanParam: 'refresh' },
-  'msi.get': { method: 'GET', path: '/api/msi', booleanParam: 'refresh' },
-  'logs.get': { method: 'GET', path: '/api/logs', integerParam: 'limit', min: 1, max: 500 },
-  'lifecycle.start': { method: 'POST', path: '/api/start' },
-  'lifecycle.stop': { method: 'POST', path: '/api/stop' },
-  'lifecycle.recover': { method: 'POST', path: '/api/recover' }
-});
+// Canonical operation table shared with the renderer; Electron 42's Node
+// supports synchronous require() of a synchronous ES module graph.
+const { BACKEND_OPERATIONS: BACKEND_OPERATION_ALLOWLIST } = require('./shared/backend-operations.mjs');
 
 function normalizeAppSettings(candidate = {}) {
   const language = candidate.language === 'ru' ? 'ru' : 'en';

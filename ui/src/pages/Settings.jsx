@@ -4,11 +4,11 @@ import { ConfigField } from '../components/ConfigField.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
 import { ToggleRow } from '../components/ToggleRow.jsx';
-import { CONFIG_PRESETS, CONFIG_SECTIONS, DEFAULT_APP_SETTINGS } from '../constants/settings.js';
+import { CONFIG_PRESETS, CONFIG_SECTIONS, DEFAULT_APP_SETTINGS } from '../constants/settings.mjs';
 import { LANGUAGES, useI18n } from '../i18n.jsx';
 import { useAppSettings } from '../state/AppSettingsContext.jsx';
-import { requestJson } from '../utils/api.js';
-import { EMPTY_APP_PROFILE, fieldLabel, toEditableConfig, validateConfigDraft } from '../utils/config.js';
+import { requestJson } from '../utils/api.mjs';
+import { EMPTY_APP_PROFILE, fieldLabel, toEditableConfig, validateConfigDraft } from '../utils/config.mjs';
 
 function displayConfigPath(configPath) {
   if (!configPath) {

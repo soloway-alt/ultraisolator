@@ -3,9 +3,9 @@ import { Tag, Tile } from '@carbon/react';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
-import { PARTITION_LABELS } from '../constants/topology.js';
-import { requestJson } from '../utils/api.js';
-import { formatCacheSize, formatCoreLabel, formatCpuSets } from '../utils/format.js';
+import { PARTITION_LABELS } from '../constants/topology.mjs';
+import { requestJson } from '../utils/api.mjs';
+import { formatCacheSize, formatCoreLabel, formatCpuSets } from '../utils/format.mjs';
 import { groupCoresByLlc } from '../utils/topology.js';
 import { useI18n } from '../i18n.jsx';
 

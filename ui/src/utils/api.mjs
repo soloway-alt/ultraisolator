@@ -1,3 +1,5 @@
+import { ROUTE_INDEX } from '../../shared/backend-operations.mjs';
+
 function parseJsonBody(body, method, path) {
   if (body === undefined || body === null || body === '') {
     return undefined;
@@ -45,64 +47,29 @@ function integerParam(url, name, path) {
   return value;
 }
 
-function operationForRequest(path, options = {}) {
+export function operationForRequest(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const url = new URL(path, 'http://isolator.local');
-  const route = url.pathname;
+  const route = ROUTE_INDEX[`${method} ${url.pathname}`];
 
-  if (method === 'GET' && route === '/api/status') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'status.get' };
+  if (!route) {
+    throw new Error(`${method} ${path} is not an allowed backend operation.`);
   }
-  if (method === 'GET' && route === '/api/config/defaults') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'config.defaults.get' };
+  requireNoUnexpectedQuery(url, [route.booleanParam, route.integerParam].filter(Boolean), path);
+  if (route.body) {
+    return { op: route.op, body: parseJsonBody(options.body, method, path) };
   }
-  if (method === 'GET' && route === '/api/config') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'config.get' };
+  if (route.booleanParam) {
+    return { op: route.op, params: { [route.booleanParam]: booleanParam(url, route.booleanParam, path) === true } };
   }
-  if (method === 'PUT' && route === '/api/config') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'config.update', body: parseJsonBody(options.body, method, path) };
-  }
-  if (method === 'GET' && route === '/api/topology') {
-    requireNoUnexpectedQuery(url, ['refresh'], path);
-    return { op: 'topology.get', params: { refresh: booleanParam(url, 'refresh', path) === true } };
-  }
-  if (method === 'GET' && route === '/api/analysis') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'analysis.get' };
-  }
-  if (method === 'GET' && route === '/api/readiness') {
-    requireNoUnexpectedQuery(url, ['refresh'], path);
-    return { op: 'readiness.get', params: { refresh: booleanParam(url, 'refresh', path) === true } };
-  }
-  if (method === 'GET' && route === '/api/msi') {
-    requireNoUnexpectedQuery(url, ['refresh'], path);
-    return { op: 'msi.get', params: { refresh: booleanParam(url, 'refresh', path) === true } };
-  }
-  if (method === 'GET' && route === '/api/logs') {
-    requireNoUnexpectedQuery(url, ['limit'], path);
-    const limit = integerParam(url, 'limit', path);
+  if (route.integerParam) {
+    const value = integerParam(url, route.integerParam, path);
     // Omit the key entirely when absent: `{limit: undefined}` survives the
     // IPC structured clone as an own property and the main-process validator
     // would reject it instead of applying the backend default.
-    return limit === undefined ? { op: 'logs.get' } : { op: 'logs.get', params: { limit } };
+    return value === undefined ? { op: route.op } : { op: route.op, params: { [route.integerParam]: value } };
   }
-  if (method === 'POST' && route === '/api/start') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'lifecycle.start' };
-  }
-  if (method === 'POST' && route === '/api/stop') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'lifecycle.stop' };
-  }
-  if (method === 'POST' && route === '/api/recover') {
-    requireNoUnexpectedQuery(url, [], path);
-    return { op: 'lifecycle.recover' };
-  }
-  throw new Error(`${method} ${path} is not an allowed backend operation.`);
+  return { op: route.op };
 }
 
 function raiseForPayload(payload, method, path, status) {

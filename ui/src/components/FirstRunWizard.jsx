@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import brandLogo from '../../assets/icon.png';
-import { CONFIG_PRESETS } from '../constants/settings.js';
+import { CONFIG_PRESETS } from '../constants/settings.mjs';
 import { useI18n } from '../i18n.jsx';
 import { useAppSettings } from '../state/AppSettingsContext.jsx';
-import { requestJson } from '../utils/api.js';
+import { requestJson } from '../utils/api.mjs';
 
 const STEP_COUNT = 3;
 

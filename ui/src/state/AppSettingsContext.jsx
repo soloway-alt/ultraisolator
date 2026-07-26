@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { DEFAULT_APP_SETTINGS } from '../constants/settings.js';
+import { DEFAULT_APP_SETTINGS } from '../constants/settings.mjs';
 import {
   loadAppSettings,
   normalizeAppSettings,
   normalizeAppSettingsPatch,
   saveAppSettings
-} from '../utils/appSettings.js';
+} from '../utils/appSettings.mjs';
 import { AppSettingsStore } from './AppSettingsStore.mjs';
 
 const AppSettingsContext = createContext(null);

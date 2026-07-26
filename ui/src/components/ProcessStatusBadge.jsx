@@ -1,4 +1,4 @@
-import { PROCESS_STATUS_LABELS } from '../constants/processes.js';
+import { PROCESS_STATUS_LABELS } from '../constants/processes.mjs';
 import { useI18n } from '../i18n.jsx';
 
 export function ProcessStatusBadge({ status }) {

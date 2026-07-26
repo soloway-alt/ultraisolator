@@ -1,4 +1,4 @@
-import { FIELD_LABELS } from '../constants/settings.js';
+import { FIELD_LABELS } from '../constants/settings.mjs';
 
 export const EMPTY_APP_PROFILE = {
   exe: '',

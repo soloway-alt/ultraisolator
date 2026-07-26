@@ -1,6 +1,6 @@
-import { FIELD_HINTS, POSITIVE_BOOLEAN_FIELDS } from '../constants/settings.js';
+import { FIELD_HINTS, POSITIVE_BOOLEAN_FIELDS } from '../constants/settings.mjs';
 import { useI18n } from '../i18n.jsx';
-import { fieldLabel } from '../utils/config.js';
+import { fieldLabel } from '../utils/config.mjs';
 import { ToggleRow } from './ToggleRow.jsx';
 
 export function ConfigField({ field, spec, value, error, onChange }) {

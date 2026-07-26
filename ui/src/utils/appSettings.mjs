@@ -3,7 +3,7 @@ import {
   APP_SETTINGS_STORAGE_KEY,
   APP_SETTINGS_VERSION,
   DEFAULT_APP_SETTINGS
-} from '../constants/settings.js';
+} from '../constants/settings.mjs';
 
 export function normalizeAppSettings(settings = {}) {
   const language = settings.language === 'ru' ? 'ru' : 'en';

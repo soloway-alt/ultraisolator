@@ -9,7 +9,7 @@ import { ProcessTable } from '../components/ProcessTable.jsx';
 import { ReadinessChecklist } from '../components/ReadinessChecklist.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
 import { SystemAnalysis } from '../components/SystemAnalysis.jsx';
-import { formatPartitions, formatTimerResolution } from '../utils/format.js';
+import { formatPartitions, formatTimerResolution } from '../utils/format.mjs';
 import { postLifecycleAction } from '../utils/lifecycle.js';
 import { useI18n } from '../i18n.jsx';
 
