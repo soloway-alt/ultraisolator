@@ -329,7 +329,14 @@ class TopologyMixin:
             if not cpu:
                 continue
             masks_by_group.setdefault(cpu["group"], 0)
-            masks_by_group[cpu["group"]] |= 1 << cpu["logical_index"]
+            # WHY (item 8): A process affinity mask is RELATIVE to the processor
+            # group — bit 0 is the first logical processor IN THAT GROUP, not
+            # the system-wide logical index. Using the raw logical_index shifts
+            # past the 64-bit mask on machines with >64 logical processors
+            # (c_size_t silently truncates, producing a zero/wrong mask), so
+            # compute the group-relative bit exactly like the thread-level
+            # fallback in _apply_thread_affinity_fallback does.
+            masks_by_group[cpu["group"]] |= 1 << (int(cpu["logical_index"]) % 64)
         if len(masks_by_group) != 1:
             # WHY: SetProcessAffinityMask is single-group only. On dual-socket
             # or >64-logical-CPU systems the chosen CPU set may span multiple

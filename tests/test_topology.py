@@ -42,6 +42,24 @@ class CpuSetApplicationTests(unittest.TestCase):
         self.assertEqual([(99, [1])], cpu_set_calls)
         self.assertEqual([(99, [1])], affinity_calls)
 
+    def test_affinity_fallback_uses_group_relative_mask_for_high_logical_indices(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        # Second processor group on a >64-logical-CPU machine: system-wide
+        # logical indices 64..65 must map to group-relative bits 0..1.
+        isolator._cpu_sets_by_id = {
+            640: {"group": 1, "logical_index": 64},
+            641: {"group": 1, "logical_index": 65},
+        }
+
+        with mock.patch("isolator.topology.kernel32.SetProcessAffinityMask", return_value=1) as set_affinity:
+            self.assertTrue(isolator._apply_process_affinity_fallback(99, [640, 641]))
+
+        (_handle, mask_arg) = set_affinity.call_args[0]
+        self.assertEqual(0b11, mask_arg.value)
+
     def test_clearing_cpu_sets_does_not_reset_legacy_affinity_mask(self):
         isolator = EsportsIsolatorPro(
             config_path="__no_local_config__.json",
