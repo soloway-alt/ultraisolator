@@ -71,7 +71,7 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
     reported_failure_count = int(status.get("reported_failure_count", 0) or 0)
 
     checks = []
-    categories = []
+    categories: list[str] = []
 
     checks.append(_check(
         "admin",

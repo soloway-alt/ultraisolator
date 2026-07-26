@@ -122,7 +122,7 @@ def _tail_lines(path, limit):
     with open(path, "rb") as handle:
         handle.seek(0, os.SEEK_END)
         position = handle.tell()
-        chunks = []
+        chunks: list[bytes] = []
         newline_count = 0
         while position > 0 and newline_count <= limit:
             read_size = min(_READ_CHUNK_BYTES, position)

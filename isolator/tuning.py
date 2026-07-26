@@ -4,6 +4,7 @@ import ctypes
 from ctypes import wintypes
 
 from .outcomes import JailOutcome, TuningState
+from .types import ProcessState, TouchedEntry
 from .winapi import (
     ABOVE_NORMAL_PRIORITY_CLASS,
     BELOW_NORMAL_PRIORITY_CLASS,
@@ -48,8 +49,8 @@ class TuningMixin:
     def _profile_priority_class_value(self, name):
         return _PROFILE_PRIORITY_CLASSES.get(self._profile_priority_class(self._normalize_name(name)))
 
-    def _query_process_state(self, handle):
-        state = {}
+    def _query_process_state(self, handle) -> ProcessState:
+        state: ProcessState = {}
         priority_class = kernel32.GetPriorityClass(handle)
         if priority_class:
             state["priority_class"] = int(priority_class)
@@ -119,14 +120,15 @@ class TuningMixin:
                 # thread may have created an entry for this PID in the meantime.
                 if pid not in self._touched:
                     self._entry_gen += 1
-                    self._touched[pid] = {
+                    entry: TouchedEntry = {
                         "name": new_name,
                         "create_time": create_time,
                         "state": state,
                         "threads": {},
                         "source": source,
-                        "gen": self._entry_gen
+                        "gen": self._entry_gen,
                     }
+                    self._touched[pid] = entry
 
     def _restore_thread_state(self, pid, thread_id):
         pid = int(pid)

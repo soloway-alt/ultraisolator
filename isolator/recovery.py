@@ -12,6 +12,7 @@ from .protected_state import (
     remove_protected_state_file,
     write_protected_state_file,
 )
+from .types import PROCESS_STATE_KEYS
 from .winapi import (
     ABOVE_NORMAL_PRIORITY_CLASS,
     BELOW_NORMAL_PRIORITY_CLASS,
@@ -401,6 +402,10 @@ class RecoveryMixin:
             return None
         cleaned = {}
         for key, value in state.items():
+            # The accepted-key set is derived from the ProcessState shape
+            # (isolator/types.py) so the validator cannot drift from it.
+            if key not in PROCESS_STATE_KEYS:
+                continue
             if key == "priority_class":
                 if value not in self._RESTORABLE_PRIORITY_CLASSES:
                     return None
