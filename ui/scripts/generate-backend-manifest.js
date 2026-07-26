@@ -24,7 +24,15 @@ function toManifestPath(value) {
 }
 
 function hashFile(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  // Normalize CRLF to LF before hashing so the digest does not depend on how
+  // git materialized line endings on the machine that generated the manifest
+  // versus the machine (or CI runner) verifying it. Must stay byte-for-byte
+  // identical to sha256File in ui/backend-runtime.js.
+  const raw = fs.readFileSync(filePath);
+  const normalized = raw.includes(0x0d)
+    ? Buffer.from(raw.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')
+    : raw;
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 function shouldIgnore(filePath) {

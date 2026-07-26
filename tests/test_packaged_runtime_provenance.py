@@ -300,6 +300,46 @@ class BackendResourceIntegrityTests(unittest.TestCase):
         self.assertTrue(result["rejected"])
         self.assertIn("hash", result["message"].lower())
 
+    def test_backend_manifest_verification_is_line_ending_insensitive(self):
+        # The manifest can be generated on a checkout that materialized CRLF
+        # while verification runs against an LF checkout (or vice versa);
+        # both sides hash with CRLF normalized to LF, so this must pass.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            backend = root / "backend"
+            backend.mkdir()
+            target = backend / "server.py"
+            target.write_bytes(b"line one\r\nline two\r\n")
+            manifest = root / "backend-manifest.json"
+            script = rf"""
+                const fs = require('fs');
+                const crypto = require('crypto');
+                const runtime = require('./ui/backend-runtime');
+                const backendRoot = {json.dumps(str(backend))};
+                const manifestPath = {json.dumps(str(manifest))};
+                const digest = crypto.createHash('sha256').update(Buffer.from('line one\nline two\n')).digest('hex');
+                fs.writeFileSync(manifestPath, JSON.stringify({{
+                  version: 1,
+                  algorithm: 'sha256',
+                  files: {{ 'server.py': `sha256-${{digest}}` }}
+                }}));
+                const result = {{ rejected: false, message: '' }};
+                try {{
+                  runtime.verifyBackendResourceIntegrity({{
+                    backendRoot,
+                    manifestPath,
+                    isPathWritableByStandardUsers: () => false
+                  }});
+                }} catch (error) {{
+                  result.rejected = true;
+                  result.message = error.message;
+                }}
+                console.log(JSON.stringify(result));
+            """
+            result = run_node(script)
+
+        self.assertFalse(result["rejected"], result["message"])
+
     def test_backend_manifest_verification_rejects_missing_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             backend = Path(tmp) / "backend"
@@ -398,7 +438,9 @@ class BackendResourceIntegrityTests(unittest.TestCase):
             root = Path(tmp)
             backend = root / "backend"
             backend.mkdir()
-            (backend / "server.py").write_text("safe\n", encoding="utf-8")
+            # LF bytes on disk so the raw digest the script computes matches
+            # the verifier's CRLF-normalized digest.
+            (backend / "server.py").write_bytes(b"safe\n")
             (backend / "extra.py").write_text("unlisted\n", encoding="utf-8")
             manifest = root / "backend-manifest.json"
             script = rf"""
@@ -437,7 +479,9 @@ class BackendResourceIntegrityTests(unittest.TestCase):
             root = Path(tmp)
             backend = root / "backend"
             backend.mkdir()
-            (backend / "server.py").write_text("safe\n", encoding="utf-8")
+            # LF bytes on disk so the raw digest the script computes matches
+            # the verifier's CRLF-normalized digest.
+            (backend / "server.py").write_bytes(b"safe\n")
             manifest = root / "backend-manifest.json"
             linked_source = root / "linked-source"
             linked_source.mkdir()

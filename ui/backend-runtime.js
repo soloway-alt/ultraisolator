@@ -497,7 +497,15 @@ function validateManifestEntry(relativePath) {
 }
 
 function sha256File(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  // Normalize CRLF to LF before hashing so integrity verification does not
+  // depend on how git materialized line endings when the backend resources
+  // were checked out. Must stay byte-for-byte identical to hashFile in
+  // ui/scripts/generate-backend-manifest.js.
+  const raw = fs.readFileSync(filePath);
+  const normalized = raw.includes(0x0d)
+    ? Buffer.from(raw.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')
+    : raw;
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 function verifyBackendResourceIntegrity(options = {}) {
