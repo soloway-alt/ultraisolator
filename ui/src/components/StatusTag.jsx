@@ -1,9 +1,10 @@
 ﻿import { Tag } from '@carbon/react';
+import { isMonitoringActive } from '../utils/status.mjs';
 import { useI18n } from '../i18n.jsx';
 
 export function StatusTag({ status }) {
   const { t } = useI18n();
-  const monitoring = status?.monitoring_active === undefined ? status?.running : status?.monitoring_active;
+  const monitoring = isMonitoringActive(status);
   const type = status?.game_mode ? 'cyan' : monitoring ? 'green' : 'gray';
   const label = status?.game_mode
     ? t('status.gameMode', 'Optimizing game')

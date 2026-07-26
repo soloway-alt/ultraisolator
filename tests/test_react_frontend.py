@@ -81,7 +81,8 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("function DashboardPage", dashboard)
         self.assertIn("dashboard-status-panel", dashboard)
         self.assertIn("active_games", dashboard)
-        self.assertIn("monitoring_active", dashboard)
+        # The monitoring_active/running compat rule lives in the shared helper.
+        self.assertIn("isMonitoringActive", dashboard)
         self.assertIn("tuning_state", dashboard)
         self.assertIn("Admin", dashboard)
         self.assertIn("Power Plan", dashboard)

@@ -10,6 +10,7 @@ import { ReadinessChecklist } from '../components/ReadinessChecklist.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
 import { SystemAnalysis } from '../components/SystemAnalysis.jsx';
 import { formatPartitions, formatTimerResolution } from '../utils/format.mjs';
+import { isMonitoringActive } from '../utils/status.mjs';
 import { postLifecycleAction } from '../utils/lifecycle.js';
 import { useI18n } from '../i18n.jsx';
 
@@ -49,9 +50,7 @@ export const DashboardPage = memo(function DashboardPage({ live, page }) {
   const capabilityMessages = capabilityIssues.length
     ? actionableCapabilityIssues.map((issue) => capabilityIssueText(issue, t))
     : (Array.isArray(status.capability_notes) ? status.capability_notes : []);
-  const isRunning = status.monitoring_active === undefined
-    ? Boolean(status.running)
-    : Boolean(status.monitoring_active);
+  const isRunning = isMonitoringActive(status);
   const gameMode = Boolean(status.game_mode);
   const activeProcess = Array.isArray(snapshot?.processes)
     ? snapshot.processes.find((process) => process.game || process.status === 'game')
