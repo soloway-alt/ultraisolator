@@ -26,6 +26,10 @@
   --eii-partition-background: #c98500;
   --eii-partition-housekeeping: #199e70;
   --eii-partition-unassigned: #8a9aad;
+  /* Process-status hues that are not part of the semantic set; always paired
+     with the dot + uppercase label, never color alone. */
+  --eii-status-foreground: #66e0c8;
+  --eii-status-protected: #8ab4f8;
   --eii-text: #f5f8fc;
   --eii-text-secondary: #b7c2ce;
   --eii-muted: #8a9aad;
@@ -862,6 +866,28 @@ a:focus-visible,
   border-color: var(--eii-border-interactive);
   background: var(--eii-accent-soft);
   box-shadow: none;
+}
+
+/* The interactive border repaints all four sides; the partition identity
+   bar on top must survive hover and selection. */
+.core-tile.partition-game:hover,
+.core-tile.partition-game.selected {
+  border-top-color: var(--eii-partition-game);
+}
+
+.core-tile.partition-background:hover,
+.core-tile.partition-background.selected {
+  border-top-color: var(--eii-partition-background);
+}
+
+.core-tile.partition-housekeeping:hover,
+.core-tile.partition-housekeeping.selected {
+  border-top-color: var(--eii-partition-housekeeping);
+}
+
+.core-tile.partition-unassigned:hover,
+.core-tile.partition-unassigned.selected {
+  border-top-color: var(--eii-partition-unassigned);
 }
 
 .notification-drawer-toggle,

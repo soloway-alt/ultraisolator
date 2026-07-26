@@ -417,10 +417,10 @@ body {
 
 .action-error {
   margin-top: 10px;
-  border: 1px solid rgba(255, 71, 87, 0.55);
+  border: 1px solid rgba(244, 93, 109, 0.55);
   border-radius: var(--eii-radius-sm);
   padding: 10px 12px;
-  background: rgba(255, 71, 87, 0.08);
+  background: rgba(244, 93, 109, 0.08);
   color: var(--eii-alert);
   font-family: var(--eii-font-mono);
   font-size: 12px;
@@ -634,11 +634,11 @@ body {
 }
 
 .process-row.game td {
-  background: rgba(0, 212, 170, 0.035);
+  background: rgba(47, 126, 247, 0.05);
 }
 
 .process-row.jailed td {
-  background: rgba(255, 184, 0, 0.035);
+  background: rgba(242, 184, 75, 0.05);
 }
 
 .process-table tbody tr:hover td {
@@ -683,19 +683,19 @@ body {
 }
 
 .status-badge.foreground {
-  color: #66E0C8;
+  color: var(--eii-status-foreground);
 }
 
 .status-badge.foreground .status-badge-dot {
-  background: #66E0C8;
+  background: var(--eii-status-foreground);
 }
 
 .status-badge.protected {
-  color: #8AB4F8;
+  color: var(--eii-status-protected);
 }
 
 .status-badge.protected .status-badge-dot {
-  background: #8AB4F8;
+  background: var(--eii-status-protected);
 }
 
 .process-table .mono {
@@ -1325,6 +1325,11 @@ body {
   content: "";
 }
 
+/* Absence of a partition, not a series — the swatch is dashed like the tile bar. */
+.legend-item.partition-unassigned::before {
+  border-style: dashed;
+}
+
 .llc-group-list {
   display: grid;
   gap: 14px;
@@ -1647,11 +1652,11 @@ body {
 }
 
 .log-row.warning td {
-  background: rgba(255, 184, 0, 0.035);
+  background: rgba(242, 184, 75, 0.05);
 }
 
 .log-row.error td {
-  background: rgba(255, 71, 87, 0.045);
+  background: rgba(244, 93, 109, 0.045);
 }
 
 .log-table tbody tr:hover td {
@@ -1712,7 +1717,7 @@ body {
 .analysis-actions button:hover:not(:disabled),
 .analysis-actions button:focus-visible:not(:disabled) {
   border-color: var(--eii-accent);
-  background: rgba(0, 212, 170, 0.1);
+  background: var(--eii-accent-soft);
   color: var(--eii-accent);
   outline: 0;
 }
@@ -1853,15 +1858,15 @@ body {
 }
 
 .analysis-check.ok {
-  border-color: rgba(0, 212, 170, 0.28);
+  border-color: rgba(53, 211, 146, 0.3);
 }
 
 .analysis-check.warning {
-  border-color: rgba(255, 184, 0, 0.28);
+  border-color: rgba(242, 184, 75, 0.3);
 }
 
 .analysis-check.error {
-  border-color: rgba(255, 71, 87, 0.35);
+  border-color: rgba(244, 93, 109, 0.35);
 }
 
 .analysis-check-top {
@@ -1945,15 +1950,15 @@ body {
 }
 
 .readiness-check.ok {
-  border-color: rgba(0, 212, 170, 0.25);
+  border-color: rgba(53, 211, 146, 0.3);
 }
 
 .readiness-check.warning {
-  border-color: rgba(255, 184, 0, 0.28);
+  border-color: rgba(242, 184, 75, 0.3);
 }
 
 .readiness-check.error {
-  border-color: rgba(255, 71, 87, 0.35);
+  border-color: rgba(244, 93, 109, 0.35);
 }
 
 .readiness-check-top {
@@ -2009,8 +2014,8 @@ body {
 .msi-table .cds--tag--green,
 .page-heading .cds--tag--green,
 .page-heading .cds--tag--cyan {
-  border-color: rgba(0, 212, 170, 0.42);
-  background: rgba(0, 212, 170, 0.12);
+  border-color: rgba(53, 211, 146, 0.42);
+  background: rgba(53, 211, 146, 0.12);
   color: var(--eii-accent-strong);
 }
 
@@ -2018,16 +2023,16 @@ body {
 .readiness-check .cds--tag--yellow,
 .msi-table .cds--tag--yellow,
 .log-table .cds--tag--yellow {
-  border-color: rgba(255, 184, 0, 0.42);
-  background: rgba(255, 184, 0, 0.1);
+  border-color: rgba(242, 184, 75, 0.42);
+  background: rgba(242, 184, 75, 0.1);
   color: var(--eii-warning);
 }
 
 .analysis-check .cds--tag--red,
 .readiness-check .cds--tag--red,
 .log-table .cds--tag--red {
-  border-color: rgba(255, 71, 87, 0.48);
-  background: rgba(255, 71, 87, 0.12);
+  border-color: rgba(244, 93, 109, 0.48);
+  background: rgba(244, 93, 109, 0.12);
   color: var(--eii-alert);
 }
 
@@ -2051,11 +2056,11 @@ body {
 }
 
 .notification-toast.warning {
-  border-color: rgba(255, 184, 0, 0.42);
+  border-color: rgba(242, 184, 75, 0.42);
 }
 
 .notification-toast.error {
-  border-color: rgba(255, 71, 87, 0.5);
+  border-color: rgba(244, 93, 109, 0.5);
 }
 
 .notification-toast-header,
@@ -2165,11 +2170,11 @@ body {
 }
 
 .notification-history-item.error {
-  border-color: rgba(255, 71, 87, 0.36);
+  border-color: rgba(244, 93, 109, 0.36);
 }
 
 .notification-history-item.warning {
-  border-color: rgba(255, 184, 0, 0.32);
+  border-color: rgba(242, 184, 75, 0.32);
 }
 
 .notification-history-meta {
@@ -2471,7 +2476,7 @@ body {
 .quick-actions button:first-child:hover:not(:disabled),
 .quick-actions button:first-child:focus-visible:not(:disabled) {
   color: #03100E;
-  box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.22);
+  box-shadow: 0 0 0 2px rgba(47, 126, 247, 0.28);
 }
 
 .settings-toolbar {
@@ -2497,7 +2502,7 @@ body {
 .settings-field > textarea:focus,
 .process-search:focus,
 .log-category-select:focus {
-  box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.18);
+  box-shadow: 0 0 0 2px rgba(86, 160, 255, 0.28);
 }
 
 .toggle-row > .toggle-control > input {
@@ -2851,7 +2856,7 @@ body {
 }
 
 .dashboard-status-panel.game-mode {
-  border-color: rgba(66, 199, 183, 0.5);
+  border-color: rgba(47, 126, 247, 0.55);
   box-shadow: inset 0 2px 0 var(--eii-accent), var(--eii-shadow);
 }
 
@@ -2865,9 +2870,9 @@ body {
 }
 
 .quick-actions button:first-child {
-  border-color: rgba(66, 199, 183, 0.6);
-  background: #42c7b7;
-  color: #061412;
+  border-color: var(--eii-accent-strong);
+  background: var(--eii-accent);
+  color: #ffffff;
 }
 
 .quick-actions button:hover:not(:disabled),
@@ -2877,8 +2882,8 @@ body {
 .process-filter-group button:hover,
 .process-filter-group button:focus-visible,
 .process-filter-group button.active {
-  border-color: rgba(109, 224, 210, 0.72);
-  background: rgba(66, 199, 183, 0.11);
+  border-color: var(--eii-border-interactive);
+  background: var(--eii-accent-soft);
   color: var(--eii-accent-strong);
 }
 
@@ -2892,7 +2897,7 @@ body {
 .process-table tbody tr:hover td,
 .log-table tbody tr:hover td,
 .msi-table tbody tr:hover td {
-  background: rgba(148, 166, 176, 0.07);
+  background: rgba(47, 126, 247, 0.05);
 }
 
 .analysis-score-meter {
