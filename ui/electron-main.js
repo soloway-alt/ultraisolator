@@ -1,9 +1,7 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, globalShortcut } = require('electron');
-const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
-const net = require('net');
 const path = require('path');
 const {
   appendBackendStartupLog,
@@ -71,6 +69,25 @@ const { createRendererResolver, rendererFailureUrl } = require('./main/renderer-
 // SSE relay between the backend /api/live stream and the renderer;
 // reconnect and frame-parsing logic is Electron-free and unit-tested.
 const { createLiveStreamRelay } = require('./main/live-stream');
+// Electron-free backend plumbing: JSON client, readiness poll, port
+// discovery, ENOENT-safe spawn, restart backoff, and kill escalation.
+const {
+  createBackendJsonClient,
+  findFreePort,
+  forceKillProcessTree,
+  restartDelayMs,
+  spawnBackendOnce,
+  waitForBackendReady
+} = require('./main/backend-supervisor');
+// Tray decision logic: icon artwork, status mapping, and menu templates.
+const {
+  normalizeTrayStatus,
+  trayErrorMenuTemplate,
+  trayIconSvg,
+  trayMenuTemplate,
+  trayStateForStatus,
+  trayTooltip
+} = require('./main/tray');
 const rendererResolver = createRendererResolver({
   isPackaged: app.isPackaged,
   distIndexPath: path.join(__dirname, 'dist', 'index.html'),
@@ -193,21 +210,7 @@ function createTrayIcon(state) {
       return image;
     }
   }
-
-  const colors = {
-    idle: '#6F7782',
-    game: '#00D4AA',
-    error: '#FF4757'
-  };
-  const color = colors[state] || colors.idle;
-  const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">',
-    '<rect width="32" height="32" rx="6" fill="#0A0A0A"/>',
-    `<path d="M16 4 26 9v7c0 6.3-4 10.8-10 12-6-1.2-10-5.7-10-12V9l10-5Z" fill="${color}" opacity="0.95"/>`,
-    '<path d="M16 8 22 11.1v4.7c0 3.7-2.2 6.4-6 7.4-3.8-1-6-3.7-6-7.4v-4.7L16 8Z" fill="#0A0A0A" opacity="0.88"/>',
-    `<path d="M16 11.2 19.8 13.1v3.1c0 2.2-1.3 3.8-3.8 4.6-2.5-.8-3.8-2.4-3.8-4.6v-3.1l3.8-1.9Z" fill="${color}"/>`,
-    '</svg>'
-  ].join('');
+  const svg = trayIconSvg(state);
   return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
 }
 
@@ -216,72 +219,22 @@ function setTrayState(state) {
     return;
   }
   tray.setImage(createTrayIcon(state));
-  tray.setToolTip(`UltraIsolator - ${state}`);
+  tray.setToolTip(trayTooltip(state));
 }
 
 function updateTrayFromStatus(status) {
-  lastStatus = {
-    running: Boolean(status && status.running),
-    game_mode: Boolean(status && status.game_mode)
-  };
-  if (lastStatus.game_mode) {
-    setTrayState('game');
-  } else {
-    setTrayState('idle');
-  }
+  lastStatus = normalizeTrayStatus(status);
+  setTrayState(trayStateForStatus(lastStatus));
   updateTrayMenu();
 }
 
+const backendClient = createBackendJsonClient({
+  getBackendUrl: () => backendUrl,
+  getAuthToken: () => backendApiToken
+});
+
 function requestBackendJson(urlPath, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!backendUrl) {
-      reject(new Error('Backend is not ready.'));
-      return;
-    }
-    const method = String(options.method || 'GET').toUpperCase();
-    const bodyText = options.body === undefined ? null : JSON.stringify(options.body);
-    const url = new URL(urlPath, backendUrl);
-    const request = http.request({
-      method,
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname + url.search,
-      timeout: options.timeout || 2000,
-      headers: {
-        Authorization: `Bearer ${backendApiToken}`,
-        ...(bodyText === null ? {} : {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(bodyText)
-        })
-      }
-    }, (response) => {
-      const chunks = [];
-      response.on('data', (chunk) => chunks.push(chunk));
-      response.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8');
-        let payload = {};
-        try {
-          payload = text ? JSON.parse(text) : {};
-        } catch (_error) {
-          payload = { ok: false, error: `${method} ${urlPath} returned non-JSON response` };
-        }
-        if ((response.statusCode || 500) >= 400 || payload.ok === false) {
-          const error = new Error(payload.error || `${method} ${urlPath} failed with HTTP ${response.statusCode}`);
-          error.status = response.statusCode;
-          error.payload = payload;
-          reject(error);
-          return;
-        }
-        resolve(payload);
-      });
-    });
-    request.on('timeout', () => request.destroy(new Error('Request timed out.')));
-    request.on('error', reject);
-    if (bodyText !== null) {
-      request.write(bodyText);
-    }
-    request.end();
-  });
+  return backendClient.requestJson(urlPath, options);
 }
 
 function postJson(urlPath) {
@@ -323,89 +276,15 @@ async function proxyBackendRequest(event, request) {
   });
 }
 
-function findFreePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      server.close(() => resolve(address.port));
-    });
-  });
-}
-
-function waitForBackendReady(url, timeoutMs = 10000) {
-  const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
-    const attempt = () => {
-      const request = http.get(`${url}/api/status`, {
-        timeout: 800,
-        headers: { Authorization: `Bearer ${backendApiToken}` }
-      }, (response) => {
-        response.resume();
-        if (response.statusCode === 200) {
-          resolve();
-          return;
-        }
-        retry();
-      });
-      request.on('timeout', () => {
-        request.destroy();
-        retry();
-      });
-      request.on('error', retry);
-    };
-    const retry = () => {
-      if (Date.now() >= deadline) {
-        reject(new Error('API server did not become ready.'));
-        return;
-      }
-      setTimeout(attempt, 150);
-    };
-    attempt();
-  });
-}
-
-// Spawn the Python backend once. Returns a promise that resolves when the
-// process spawns successfully and rejects on a spawn 'error' (e.g. ENOENT).
-// Fix #1: attach an 'error' handler so an ENOENT (python not on PATH) rejects
-// instead of throwing an uncaught exception that crashes the main process
-// before the window is created.
-function spawnBackendOnce(pythonCommand, args, root, backendStdio) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const child = spawn(pythonCommand, args, {
-      cwd: root,
-      windowsHide: true,
-      stdio: backendStdio,
-      // The bearer token authorizes start/stop/recover on an elevated
-      // engine; pass it through the environment instead of argv so it never
-      // shows up in the Windows process table (WMI CommandLine, EDR
-      // telemetry, crash dumps).
-      env: { ...process.env, EII_API_TOKEN: backendApiToken }
-    });
-
-    child.once('error', (err) => {
-      // Spawn failure (commonly ENOENT). Never let this crash the process.
-      console.error(`[api] failed to launch '${pythonCommand}': ${err.message}`);
+function spawnBackendOptions() {
+  return {
+    apiToken: backendApiToken,
+    logWrite: (line) => {
       if (backendLogStream) {
-        backendLogStream.write(`[${new Date().toISOString()}] spawn error (${pythonCommand}): ${err.message}\n`);
+        backendLogStream.write(line);
       }
-      if (!settled) {
-        settled = true;
-        reject(err);
-      }
-    });
-
-    // 'spawn' fires once the child process is successfully spawned.
-    child.once('spawn', () => {
-      if (!settled) {
-        settled = true;
-        resolve(child);
-      }
-    });
-  });
+    }
+  };
 }
 
 async function launchBackendProcess(port) {
@@ -427,7 +306,7 @@ async function launchBackendProcess(port) {
     });
     const pythonCommand = resolvePackagedPythonCommand({ app, env: process.env });
     await preflightPythonRuntime(app, PROJECT_ROOT, pythonCommand);
-    return await spawnBackendOnce(pythonCommand, args, root, backendStdio);
+    return await spawnBackendOnce(pythonCommand, args, root, backendStdio, spawnBackendOptions());
   }
 
   // In development, try the configured interpreter first, then fall back to
@@ -442,7 +321,7 @@ async function launchBackendProcess(port) {
     tried.add(pythonCommand);
     try {
       await preflightPythonRuntime(app, PROJECT_ROOT, pythonCommand);
-      return await spawnBackendOnce(pythonCommand, args, root, backendStdio);
+      return await spawnBackendOnce(pythonCommand, args, root, backendStdio, spawnBackendOptions());
     } catch (error) {
       lastError = error;
       if (error && error.code !== 'ENOENT') {
@@ -466,7 +345,7 @@ function attachBackendHandlers() {
     // against restarting during quit.
     if (backendRestartCount < MAX_BACKEND_RESTARTS) {
       backendRestartCount += 1;
-      const delay = Math.min(8000, 1000 * backendRestartCount);
+      const delay = restartDelayMs(backendRestartCount);
       console.error(`[api] backend exited (code=${code}, signal=${signal}); restart ${backendRestartCount}/${MAX_BACKEND_RESTARTS} in ${delay}ms`);
       setTrayState('error');
       updateTrayMenu();
@@ -527,7 +406,7 @@ async function startBackend() {
   backendProcess = await launchBackendProcess(port);
   attachBackendHandlers();
 
-  await waitForBackendReady(backendUrl);
+  await waitForBackendReady(backendUrl, backendApiToken);
   backendStartupError = null;
   rendererResolver.invalidate();
   return backendUrl;
@@ -701,15 +580,13 @@ function updateTrayMenu() {
   if (!tray) {
     return;
   }
-  const lifecycleLabel = lastStatus.running ? 'Stop Isolator' : 'Start Isolator';
-  const lifecycleClick = lastStatus.running ? stopIsolator : startIsolator;
-  const menu = Menu.buildFromTemplate([
-    { label: 'Open Dashboard', click: showMainWindow },
-    { type: 'separator' },
-    { label: lifecycleLabel, click: lifecycleClick },
-    { type: 'separator' },
-    { label: 'Exit', click: quitApplication }
-  ]);
+  const menu = Menu.buildFromTemplate(trayMenuTemplate({
+    running: lastStatus.running,
+    onShow: showMainWindow,
+    onStart: startIsolator,
+    onStop: stopIsolator,
+    onQuit: quitApplication
+  }));
   tray.setContextMenu(menu);
 }
 
@@ -792,17 +669,7 @@ function killBackendProcess() {
   }
   try {
     child.removeAllListeners('exit');
-    if (child.exitCode === null && child.signalCode === null) {
-      if (process.platform === 'win32' && child.pid) {
-        try {
-          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
-        } catch (_error) {
-          child.kill();
-        }
-      } else {
-        child.kill('SIGKILL');
-      }
-    }
+    forceKillProcessTree(child);
   } catch (error) {
     console.error(`[api] failed to kill backend: ${error.message}`);
   }
@@ -826,20 +693,10 @@ async function gracefulShutdownBackend() {
   }
   await new Promise((resolve) => {
     const timer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        // Fix #6: SIGTERM/child.kill() does not reliably kill the Python
-        // process tree on Windows; escalate to taskkill /T /F (whole tree) and
-        // SIGKILL elsewhere so the backend cannot orphan and hold the port.
-        if (process.platform === 'win32' && child.pid) {
-          try {
-            spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
-          } catch (_error) {
-            child.kill('SIGKILL');
-          }
-        } else {
-          child.kill('SIGKILL');
-        }
-      }
+      // Fix #6: SIGTERM/child.kill() does not reliably kill the Python
+      // process tree on Windows; escalate so the backend cannot orphan and
+      // hold the port.
+      forceKillProcessTree(child);
       resolve();
     }, SHUTDOWN_TIMEOUT_MS);
     child.once('exit', () => {
@@ -926,12 +783,10 @@ function setTrayErrorMenu() {
     return;
   }
   setTrayState('error');
-  const menu = Menu.buildFromTemplate([
-    { label: 'Backend failed to start', enabled: false },
-    { type: 'separator' },
-    { label: 'Retry', click: retryBootstrap },
-    { label: 'Exit', click: quitApplication }
-  ]);
+  const menu = Menu.buildFromTemplate(trayErrorMenuTemplate({
+    onRetry: retryBootstrap,
+    onQuit: quitApplication
+  }));
   tray.setContextMenu(menu);
 }
 
