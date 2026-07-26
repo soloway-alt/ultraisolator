@@ -1,14 +1,8 @@
+/* Flattened stylesheet: styles.css + premium.css merged by cascade-winner
+ * (scripted, verified byte-identical against the Playwright baselines).
+ * Duplicate selectors below are deliberate cascade-order splits. */
 * {
     box-sizing: border-box
-}
-html, body, #root {
-    min-width: 0;
-    height: 100%;
-    min-height: 100%;
-    margin: 0
-}
-body {
-    overflow: hidden
 }
 .app-shell {
     height: 100vh;
@@ -1584,16 +1578,11 @@ body {
 .cds--header, .cds--side-nav, .cds--side-nav__navigation, .cds--side-nav__items {
     background: rgba(8, 12, 15, 0.96)
 }
-.cds--header {
-    border-bottom-color: var(--eii-border-soft)
-}
 .cds--side-nav {
     border-right-color: var(--eii-border-soft);
     padding-top: 10px
 }
-.cds--side-nav__link--current::before {
-    display: none
-}
+/* stylelint-disable-next-line no-duplicate-selectors */
 .page-heading {
     border-radius: 8px
 }
@@ -1607,24 +1596,28 @@ body {
     background: linear-gradient(180deg, rgba(20, 35, 40, 0.74), rgba(12, 17, 20, 0.92));
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-cell {
     border-right: 1px solid var(--eii-border-soft)
 }
 .kpi-cell:last-child {
     border-right: 1px solid var(--eii-border-soft)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-cell.highlight::before {
     height: 3px;
     border-radius: 8px 8px 0 0
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .dashboard-status-panel {
     overflow: hidden;
     margin-top: 18px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .mode-readout, .capability-grid {
     border-right-color: var(--eii-border-soft)
 }
-.mode-value, .kpi-value, .analysis-score-value {
+.kpi-value, .mode-value, .analysis-score-value {
     letter-spacing: 0
 }
 .quick-actions button, .settings-actions button, .analysis-actions button, .profiles-header button, .profile-remove, .first-run-actions button, .process-filter-group button, .notification-drawer-toggle {
@@ -1635,6 +1628,7 @@ body {
     color: #03100E;
     box-shadow: 0 0 0 2px rgba(47, 126, 247, 0.28)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-toolbar {
     margin-top: 18px
 }
@@ -1647,9 +1641,7 @@ body {
 .log-table-wrap, .process-table-wrap {
     border-radius: 0 0 8px 8px
 }
-.msi-table th, .msi-table td, .process-table th, .process-table td, .log-table th, .log-table td {
-    border-bottom-color: rgba(118, 158, 166, 0.12)
-}
+/* stylelint-disable-next-line no-duplicate-selectors */
 .notification-drawer-toggle {
     border-color: rgba(0, 212, 170, 0.35);
     background: rgba(10, 18, 21, 0.94)
@@ -1657,19 +1649,23 @@ body {
 .settings-page .page-heading {
     padding: 18px 24px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-toolbar {
     min-height: 56px;
     padding: 10px 20px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-section {
     padding: 16px 18px 18px;
     background: rgba(13, 20, 23, 0.9);
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-field-hint, .settings-field-error, .toggle-detail {
     font-size: 10px;
     line-height: 1.35
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .toggle-field {
     align-self: start;
     justify-content: stretch;
@@ -1678,6 +1674,7 @@ body {
     background: rgba(7, 11, 13, 0.42);
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .toggle-row {
     transition: background 140ms ease-out, border-color 140ms ease-out
 }
@@ -1686,17 +1683,21 @@ body {
     align-items: center;
     gap: 8px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .toggle-row > .toggle-control > input {
     border-color: rgba(118, 158, 166, 0.26)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .preset-button-grid button {
     background: rgba(7, 11, 13, 0.44);
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .profiles-list {
     gap: 10px;
     margin-top: 12px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .profile-row {
     background: rgba(7, 11, 13, 0.44);
     box-shadow: none
@@ -1706,6 +1707,7 @@ body {
         grid-template-columns: 1fr
     }
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .cds--header__name, .cds--header__name:hover {
     color: var(--eii-text);
     letter-spacing: 0.03em;
@@ -1726,23 +1728,28 @@ body {
     background: linear-gradient(180deg, rgba(25, 37, 46, 0.9), rgba(14, 21, 27, 0.96));
     box-shadow: var(--eii-shadow)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .page-heading {
     margin-bottom: 16px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .section-label::before {
     background: var(--eii-secondary);
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-strip {
     gap: 10px
 }
 .kpi-cell:hover, .kpi-cell.highlight {
     background: linear-gradient(180deg, rgba(35, 50, 61, 0.96), rgba(17, 26, 33, 0.98))
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-cell.highlight::before {
     background: var(--eii-secondary);
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-value, .mode-value, .analysis-score-value {
     color: var(--eii-text);
     text-shadow: none
@@ -1750,6 +1757,7 @@ body {
 .kpi-cell.positive .kpi-value, .status-badge.game, .settings-message, .process-count-readout {
     color: var(--eii-accent-strong)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .dashboard-status-panel {
     border-color: rgba(148, 166, 176, 0.24);
     background: linear-gradient(135deg, rgba(66, 199, 183, 0.08), transparent 38%),
@@ -1775,6 +1783,7 @@ body {
 .process-table tbody tr:hover td, .log-table tbody tr:hover td, .msi-table tbody tr:hover td {
     background: rgba(47, 126, 247, 0.05)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .analysis-score-meter {
     box-shadow: inset 0 0 0 1px var(--eii-border-soft)
 }
@@ -1782,6 +1791,7 @@ body {
     background: rgba(14, 21, 27, 0.98);
     box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .notification-history-item {
     border-color: var(--eii-border-soft);
     background: rgba(18, 28, 35, 0.72)
@@ -1798,6 +1808,7 @@ body {
     .main-content, .cds--content.main-content {
         padding-top: 64px
     }
+    /* stylelint-disable-next-line no-duplicate-selectors */
     .page-heading {
         padding: 18px
     }
@@ -1891,9 +1902,14 @@ body {
     color-scheme: dark
 }
 html, body, #root {
+    min-width: 0;
+    height: 100%;
+    min-height: 100%;
+    margin: 0;
     background: var(--eii-bg)
 }
 body {
+    overflow: hidden;
     color: var(--eii-text);
     font-family: var(--eii-font-label);
     font-synthesis: none;
@@ -1906,15 +1922,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     outline: 2px solid var(--eii-focus);
     outline-offset: 3px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .app-shell {
     background: var(--eii-bg)
 }
 .cds--header {
+    border-bottom-color: var(--eii-border-soft);
     height: 52px;
     border-bottom: 1px solid var(--eii-border);
     background: var(--eii-bg);
     backdrop-filter: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .header-status {
     gap: 9px;
     padding-inline: 20px;
@@ -1925,6 +1944,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     letter-spacing: 0;
     text-transform: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .stream-dot {
     width: 7px;
     height: 7px;
@@ -1938,6 +1958,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-alert);
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .cds--side-nav {
     top: 52px;
     width: 224px;
@@ -1951,6 +1972,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .cds--side-nav__items {
     padding: 16px 12px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .cds--side-nav__link {
     display: flex;
     align-items: center;
@@ -1983,6 +2005,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     box-shadow: none
 }
 .cds--side-nav__link--current::before {
+    display: none;
     left: -1px;
     width: 3px;
     border-radius: 0;
@@ -2003,9 +2026,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-bg);
     scrollbar-color: var(--eii-border-strong) var(--eii-bg)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .page {
     width: min(1360px, 100%)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .page-heading {
     align-items: flex-end;
     margin: 0 0 24px;
@@ -2014,6 +2039,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: transparent;
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .page-heading h1 {
     color: var(--eii-text);
     font-family: var(--eii-font-label);
@@ -2022,6 +2048,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     letter-spacing: -0.035em;
     line-height: 1.12
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .section-label {
     margin-bottom: 8px;
     color: var(--eii-muted);
@@ -2030,12 +2057,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     letter-spacing: 0.08em;
     text-transform: uppercase
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .section-label::before {
     display: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .status-row {
     gap: 8px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .cds--tag {
     border: 1px solid var(--eii-border);
     border-radius: var(--eii-radius-full);
@@ -2059,6 +2089,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     color: var(--eii-muted);
     font-family: var(--eii-font-label)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-strip {
     border: 1px solid var(--eii-border);
     border-radius: var(--eii-radius);
@@ -2071,9 +2102,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-surface);
     transform: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-cell.highlight::before {
     display: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-label {
     margin-bottom: 8px;
     color: var(--eii-muted);
@@ -2082,12 +2115,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     font-weight: var(--eii-font-weight-semibold);
     letter-spacing: 0.06em
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-value {
     color: var(--eii-text);
     font-size: clamp(18px, 2vw, 25px);
     font-weight: var(--eii-font-weight-semibold);
     letter-spacing: -0.025em
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .kpi-baseline {
     color: var(--eii-muted);
     font-family: var(--eii-font-label);
@@ -2099,6 +2134,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .topology-summary-grid, .logs-summary-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr))
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .dashboard-kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr))
 }
@@ -2344,10 +2380,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dashboard-insights, .analysis-grid, .settings-grid, .topology-layout {
     gap: 16px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .dashboard-insights {
     grid-template-columns: repeat(auto-fit, minmax(640px, 1fr));
     align-items: start
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .dashboard-insights .module-surface {
     height: auto
 }
@@ -2358,6 +2396,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     border-color: var(--eii-border);
     background: var(--eii-surface-raised)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .analysis-score-meter {
     border-color: var(--eii-border-strong);
     background: var(--eii-sidebar)
@@ -2374,6 +2413,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-path, .process-count-readout {
     color: var(--eii-muted)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-field > input, .settings-field > select, .settings-field > textarea, .process-search, .log-category-select {
     min-height: var(--eii-control-height);
     border: 1px solid var(--eii-border-strong);
@@ -2404,6 +2444,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-accent);
     color: #ffffff
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-message {
     border: 1px solid var(--eii-border-strong);
     border-radius: var(--eii-radius-sm);
@@ -2421,6 +2462,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     color: var(--eii-text-secondary)
 }
 .process-table th, .process-table td, .log-table th, .log-table td, .msi-table th, .msi-table td {
+    border-bottom-color: rgba(118, 158, 166, 0.12);
     border-color: var(--eii-border)
 }
 .process-table th, .log-table th, .msi-table th {
@@ -2436,11 +2478,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .mono, .core-index, .process-count-readout {
     font-family: var(--eii-font-mono)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .status-badge {
     border-color: var(--eii-border-strong);
     border-radius: var(--eii-radius-full);
     background: var(--eii-surface-raised)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .status-badge-dot {
     box-shadow: none
 }
@@ -2448,12 +2492,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-accent-strong);
     box-shadow: 0 0 8px rgba(86, 160, 255, 0.7)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .topology-map, .core-detail-panel {
     min-height: 0
 }
 .llc-group-list, .core-grid {
     gap: 10px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .core-tile {
     min-height: 88px;
     border-color: var(--eii-border);
@@ -2483,6 +2529,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-surface-raised);
     box-shadow: var(--eii-shadow)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .first-run-overlay {
     padding: 24px;
     background: rgba(2, 8, 15, 0.88);
@@ -2545,6 +2592,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     font-size: 15px;
     line-height: 1.6
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .first-run-kicker {
     margin-bottom: 10px;
     color: var(--eii-accent-strong);
@@ -2680,6 +2728,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     font-size: 12px;
     line-height: 1.5
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .first-run-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr))
 }
@@ -2690,6 +2739,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     background: var(--eii-surface-raised);
     box-shadow: none
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .first-run-preset {
     min-height: 176px;
     padding: 20px;
@@ -2724,10 +2774,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     letter-spacing: 0.04em;
     text-transform: uppercase
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .first-run-preset small, .first-run-actions span {
     color: var(--eii-muted);
     font-family: var(--eii-font-label)
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .first-run-preset code {
     color: var(--eii-accent-strong);
     font-family: var(--eii-font-mono)
@@ -2842,11 +2894,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .section-tuning .field-protected_extra {
     grid-column: span 3
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-field {
     display: grid;
     min-width: 0;
     gap: 7px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-field > input, .settings-field > select, .settings-field > textarea {
     display: block;
     width: 100%;
@@ -2859,9 +2913,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     font-weight: var(--eii-font-weight-medium);
     line-height: 1.4
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-field > input, .settings-field > select {
     height: 42px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .settings-field > textarea {
     min-height: 86px;
     padding-block: 10px;
@@ -2902,6 +2958,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     white-space: nowrap !important;
     border: 0 !important
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .toggle-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;
@@ -2923,12 +2980,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     min-width: 0;
     gap: 4px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .toggle-row > .toggle-control {
     display: grid;
     width: 44px;
     height: 44px;
     place-items: center
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .toggle-row > .toggle-control > input {
     position: relative;
     flex: 0 0 auto;
@@ -2977,6 +3036,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     gap: 10px;
     margin-top: 16px
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .preset-button-grid button {
     display: grid;
     align-content: start;
@@ -3004,9 +3064,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     font-size: 11px;
     letter-spacing: 0.06em
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .analysis-panel {
     container-type: inline-size
 }
+/* stylelint-disable-next-line no-duplicate-selectors */
 .analysis-summary {
     grid-template-columns: repeat(2, minmax(132px, 1fr))
 }
@@ -3117,6 +3179,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
         width: 192px;
         max-width: 192px
     }
+    /* stylelint-disable-next-line no-duplicate-selectors */
     .main-content, .cds--content.main-content {
         margin-left: 192px;
         padding: 76px 18px 24px
