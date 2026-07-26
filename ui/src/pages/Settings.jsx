@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
+import { AppProfilesEditor } from '../components/AppProfilesEditor.jsx';
 import { ConfigField } from '../components/ConfigField.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
@@ -8,7 +9,7 @@ import { CONFIG_PRESETS, CONFIG_SECTIONS, DEFAULT_APP_SETTINGS } from '../consta
 import { LANGUAGES, useI18n } from '../i18n.jsx';
 import { useAppSettings } from '../state/AppSettingsContext.jsx';
 import { requestJson } from '../utils/api.mjs';
-import { EMPTY_APP_PROFILE, toEditableConfig, translatedNotice, validateConfigDraft } from '../utils/config.mjs';
+import { toEditableConfig, translatedNotice, validateConfigDraft } from '../utils/config.mjs';
 
 function displayConfigPath(configPath) {
   if (!configPath) {
@@ -98,45 +99,8 @@ export const SettingsPage = memo(function SettingsPage({ live, page }) {
     });
   };
 
-  const appProfileErrors = (index, field = null) => {
-    const exactKey = field ? `app_profiles[${index}].${field}` : `app_profiles[${index}]`;
-    return translatedNotice(fieldErrors[exactKey], t) || '';
-  };
-
   const presetLabel = (preset) => t(`settings.preset.${preset.id}.label`, preset.label);
   const presetDetail = (preset) => t(`settings.preset.${preset.id}.detail`, preset.detail);
-
-  const addProfile = () => {
-    setDraft((current) => ({
-      ...current,
-      app_profiles: [...(current.app_profiles || []), { ...EMPTY_APP_PROFILE }]
-    }));
-  };
-
-  const removeProfile = (index) => {
-    setDraft((current) => ({
-      ...current,
-      app_profiles: (current.app_profiles || []).filter((_, itemIndex) => itemIndex !== index)
-    }));
-    setFieldErrors((current) => {
-      const next = {};
-      for (const [key, value] of Object.entries(current)) {
-        if (!key.startsWith('app_profiles[')) {
-          next[key] = value;
-        }
-      }
-      return next;
-    });
-  };
-
-  const updateProfile = (index, patch) => {
-    setDraft((current) => ({
-      ...current,
-      app_profiles: (current.app_profiles || []).map((profile, itemIndex) => (
-        itemIndex === index ? { ...profile, ...patch } : profile
-      ))
-    }));
-  };
 
   const applyPresetToDraft = (preset) => {
     if (!draft) {
@@ -296,72 +260,14 @@ export const SettingsPage = memo(function SettingsPage({ live, page }) {
           </Tile>
 
           {schema.app_profiles ? (
-            <Tile className="settings-section profiles-editor">
-              <div className="profiles-header">
-                <div>
-                  <div className="module-title">{t('settings.profiles', 'App-specific rules')}</div>
-                  <div className="profiles-subtitle">{t('settings.profilesDetail', 'Choose how individual apps are handled. System and anti-cheat processes always stay protected.')}</div>
-                </div>
-                <button type="button" onClick={addProfile}>{t('settings.addProfile', 'Add profile')}</button>
-              </div>
-              {(draft.app_profiles || []).length === 0 ? (
-                <div className="module-empty">{t('settings.noProfiles', 'No profiles configured')}</div>
-              ) : (
-                <div className="profiles-list">
-                  {(draft.app_profiles || []).map((profile, index) => (
-                    <div className="profile-row" key={`${profile.exe || 'profile'}-${index}`}>
-                      <label className={`settings-field${appProfileErrors(index, 'exe') ? ' invalid' : ''}`}>
-                        <span className="settings-field-label">{t('settings.profileExecutable', 'Application executable')}</span>
-                        <input
-                          type="text"
-                          value={profile.exe}
-                          spellCheck="false"
-                          placeholder="example.exe"
-                          onChange={(event) => updateProfile(index, { exe: event.target.value })}
-                        />
-                        <span className={appProfileErrors(index, 'exe') ? 'settings-field-error' : 'settings-field-hint'}>
-                          {appProfileErrors(index, 'exe') || t('settings.profileExeHint', 'Names without .exe are completed automatically.')}
-                        </span>
-                      </label>
-                      <label className="settings-field">
-                        <span className="settings-field-label">{t('settings.priority', 'Priority')}</span>
-                        <select
-                          value={profile.priority_class}
-                          onChange={(event) => updateProfile(index, { priority_class: event.target.value })}
-                        >
-                          <option value="">{t('settings.default', 'Default')}</option>
-                          {schema.app_profiles.priority_choices.map((choice) => (
-                            <option key={choice} value={choice}>{choice}</option>
-                          ))}
-                        </select>
-                        <span className={appProfileErrors(index, 'priority_class') ? 'settings-field-error' : 'settings-field-hint'}>
-                          {appProfileErrors(index, 'priority_class') || t('settings.priorityHint', 'Optional priority override.')}
-                        </span>
-                      </label>
-                      <div className="profile-flags">
-                        {[
-                          ['enabled', t('settings.profileEnabled', 'Enabled')],
-                          ['treat_as_game', t('settings.profileTreatAsGame', 'Treat as game')],
-                          ['never_jail', t('settings.profileNeverJail', 'Always leave unchanged')],
-                          ['always_jail', t('settings.profileAlwaysJail', 'Always limit in background')]
-                        ].map(([field, label]) => (
-                          <label className="profile-flag" key={field}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(profile[field])}
-                              onChange={(event) => updateProfile(index, { [field]: event.target.checked })}
-                            />
-                            <span>{label}</span>
-                          </label>
-                        ))}
-                      </div>
-                      {appProfileErrors(index) ? <div className="settings-field-error profile-row-error">{appProfileErrors(index)}</div> : null}
-                      <button type="button" className="profile-remove" onClick={() => removeProfile(index)}>{t('settings.remove', 'Remove')}</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Tile>
+            <AppProfilesEditor
+              profiles={draft.app_profiles || []}
+              spec={schema.app_profiles}
+              fieldErrors={fieldErrors}
+              onProfilesChange={(nextProfiles) => setDraft((current) => ({ ...current, app_profiles: nextProfiles }))}
+              onFieldErrorsChange={setFieldErrors}
+              t={t}
+            />
           ) : null}
 
           <Tile className="settings-section app-behavior-section">

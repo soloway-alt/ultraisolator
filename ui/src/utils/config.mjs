@@ -53,6 +53,12 @@ export function toEditableConfig(config = {}, schema = {}) {
   return draft;
 }
 
+// Single definition of the implicit `app_profiles[i]` / `app_profiles[i].field`
+// error-key format shared by the validator below and AppProfilesEditor.
+export function appProfileFieldKey(index, field = null) {
+  return field ? `app_profiles[${index}].${field}` : `app_profiles[${index}]`;
+}
+
 export function validateAppProfilesDraft(value, spec = {}) {
   const profiles = [];
   const errors = {};
@@ -67,18 +73,18 @@ export function validateAppProfilesDraft(value, spec = {}) {
     const profile = { ...EMPTY_APP_PROFILE, ...(item || {}) };
     const exe = String(profile.exe || '').trim().toLowerCase();
     if (!exe) {
-      errors[`app_profiles[${index}].exe`] = validationError('executableRequired', 'Application executable is required.');
+      errors[appProfileFieldKey(index, 'exe')] = validationError('executableRequired', 'Application executable is required.');
     } else if (seen.has(exe)) {
-      errors[`app_profiles[${index}].exe`] = validationError('duplicateExecutable', 'Duplicate application executable: {{exe}}.', { exe });
+      errors[appProfileFieldKey(index, 'exe')] = validationError('duplicateExecutable', 'Duplicate application executable: {{exe}}.', { exe });
     }
     seen.add(exe);
 
     const priority = String(profile.priority_class || '').trim().toLowerCase();
     if (priority && !priorityChoices.includes(priority)) {
-      errors[`app_profiles[${index}].priority_class`] = validationError('priorityChoice', 'Priority must be one of: {{choices}}.', { choices: priorityChoices.join(', ') });
+      errors[appProfileFieldKey(index, 'priority_class')] = validationError('priorityChoice', 'Priority must be one of: {{choices}}.', { choices: priorityChoices.join(', ') });
     }
     if (profile.never_jail && profile.always_jail) {
-      errors[`app_profiles[${index}]`] = validationError('profileRuleConflict', 'Choose either “Always leave unchanged” or “Always limit in background”.');
+      errors[appProfileFieldKey(index)] = validationError('profileRuleConflict', 'Choose either “Always leave unchanged” or “Always limit in background”.');
     }
 
     profiles.push({

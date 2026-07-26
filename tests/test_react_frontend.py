@@ -211,18 +211,26 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_settings_has_per_app_profiles_crud_editor(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        editor_path = SRC / "components" / "AppProfilesEditor.jsx"
+        self.assertTrue(editor_path.exists())
+        editor = editor_path.read_text(encoding="utf-8")
         config_utils = (SRC / "utils" / "config.mjs").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
-        self.assertIn("App-specific rules", settings)
-        self.assertIn("addProfile", settings)
-        self.assertIn("removeProfile", settings)
-        self.assertIn("updateProfile", settings)
-        self.assertIn("Application executable", settings)
+        self.assertIn("AppProfilesEditor", settings)
+        self.assertIn("App-specific rules", editor)
+        self.assertIn("addProfile", editor)
+        self.assertIn("removeProfile", editor)
+        self.assertIn("updateProfile", editor)
+        self.assertIn("Application executable", editor)
         for label in ("Treat as game", "Always leave unchanged", "Always limit in background", "Priority"):
-            self.assertIn(label, settings)
+            self.assertIn(label, editor)
         self.assertIn("app_profiles", settings + config_utils)
         self.assertIn("validateAppProfilesDraft", config_utils)
+        # The `app_profiles[i].field` error-key format has exactly one
+        # definition, shared by the validator and the editor.
+        self.assertIn("export function appProfileFieldKey", config_utils)
+        self.assertIn("appProfileFieldKey", editor)
         self.assertIn(".profiles-editor", styles)
 
     def test_first_run_wizard_applies_presets_and_tracks_completion(self):
@@ -272,10 +280,13 @@ class ReactFrontendContractTests(unittest.TestCase):
 
     def test_settings_reset_requires_confirmation(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
-        reset_body = settings[settings.index("const resetToDefaults = () => {"):settings.index("const saveSettings = async")]
 
-        self.assertIn("window.confirm", reset_body)
-        self.assertLess(reset_body.index("window.confirm"), reset_body.index("setDraft("))
+        # The destructive reset is gated on the page's only window.confirm
+        # call, which must run before the draft is reset to defaults
+        # (`toEditableConfig(defaults, schema)` is unique to resetToDefaults).
+        self.assertEqual(settings.count("window.confirm"), 1)
+        self.assertIn("setDraft(toEditableConfig(defaults, schema))", settings)
+        self.assertLess(settings.index("window.confirm"), settings.index("setDraft(toEditableConfig(defaults, schema))"))
 
     def test_topology_has_cpu_map_summary_and_core_details(self):
         topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
