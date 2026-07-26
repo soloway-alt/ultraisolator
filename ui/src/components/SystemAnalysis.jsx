@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Tag, Tile } from '@carbon/react';
-import { requestJson } from '../utils/api.mjs';
+import { useBackendResource } from '../hooks/useBackendResource.js';
+import { translatedNotice } from '../utils/config.mjs';
 import { useI18n } from '../i18n.jsx';
 
 function checkTone(status) {
@@ -37,63 +38,30 @@ export function SystemAnalysis({ live }) {
   const status = live.snapshot?.status || {};
   const gameMode = Boolean(status.game_mode);
   const hiddenWindow = !live.visible && !gameMode;
-  const [analysis, setAnalysis] = useState(null);
-  const [analysisState, setAnalysisState] = useState({
-    loading: true,
-    refreshing: false,
-    error: null
+  const enabled = live.visible && !gameMode;
+  // Refetch only on coarse transitions: enabled covers game mode and window
+  // visibility, refreshKey covers engine start/stop. Finer status flips
+  // (admin, timer, power plan, topology) stay with the manual Refresh button
+  // instead of fanning out an /api/analysis request per live tick.
+  const analysisResource = useBackendResource('/api/analysis', {
+    enabled,
+    refreshKey: Boolean(status.running)
   });
-
-  const loadAnalysis = async (background = false) => {
-    if (!live.visible || gameMode) {
-      const summary = gameMode
-        ? t('analysis.pausedGame', 'Analysis paused during game mode.')
-        : t('analysis.pausedHidden', 'Analysis paused while the window is hidden.');
-      setAnalysis({
-        ok: true,
-        available: false,
-        mode: 'analysis',
-        reason: gameMode ? 'paused_in_game_mode' : 'paused_window_hidden',
-        score: null,
-        grade: 'paused',
-        summary,
-        categories: [],
-        checks: [],
-        analysis_calls: {
-          status_reads: 1,
-          topology_refreshes: 0,
-          config_reads: 0
-        }
-      });
-      setAnalysisState((current) => ({
-        ...current,
-        loading: false,
-        refreshing: false
-      }));
-      return;
-    }
-    setAnalysisState((current) => ({
-      ...current,
-      loading: !analysis && !background,
-      refreshing: Boolean(background || analysis),
-      error: null
-    }));
-    try {
-      const payload = await requestJson('/api/analysis');
-      setAnalysis(payload);
-      setAnalysisState({ loading: false, refreshing: false, error: null });
-    } catch (error) {
-      setAnalysisState({
-        loading: false,
-        refreshing: false,
-        error: error instanceof Error ? error.message : t('analysis.loadError', 'Unable to load analysis')
-      });
-    }
-  };
-
-  useEffect(() => {
-    loadAnalysis(false);
-  }, [gameMode, live.visible, status.monitoring_active, status.running, status.admin, status.timer_resolution_applied, status.power_plan_active, status.topology_available]);
+  const pausedAnalysis = useMemo(() => ({
+    ok: true,
+    available: false,
+    mode: 'analysis',
+    reason: gameMode ? 'paused_in_game_mode' : 'paused_window_hidden',
+    score: null,
+    grade: 'paused',
+    summary: gameMode
+      ? t('analysis.pausedGame', 'Analysis paused during game mode.')
+      : t('analysis.pausedHidden', 'Analysis paused while the window is hidden.'),
+    categories: [],
+    checks: []
+  }), [gameMode, t]);
+  const analysis = enabled ? analysisResource.data : pausedAnalysis;
+  const analysisState = analysisResource;
 
   const score = analysis?.score ?? 0;
   const checks = Array.isArray(analysis?.checks) ? analysis.checks : [];
@@ -119,7 +87,7 @@ export function SystemAnalysis({ live }) {
           </div>
         </div>
         <div className="analysis-actions">
-          <button type="button" onClick={() => loadAnalysis(false)} disabled={gameMode || analysisState.loading || analysisState.refreshing}>
+          <button type="button" onClick={analysisResource.reload} disabled={gameMode || analysisState.loading || analysisState.refreshing}>
             {analysisState.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
           </button>
         </div>
@@ -127,7 +95,7 @@ export function SystemAnalysis({ live }) {
 
       {gameMode ? <div className="settings-message">{t('analysis.pausedGame', 'System analysis paused during game mode')}</div> : null}
       {hiddenWindow ? <div className="settings-message">{t('analysis.pausedHidden', 'System analysis paused while the window is hidden')}</div> : null}
-      {analysisState.error ? <div className="action-error">{analysisState.error}</div> : null}
+      {analysisState.error ? <div className="action-error">{translatedNotice(analysisState.error, t)}</div> : null}
 
       <div className="analysis-grid">
         <div
