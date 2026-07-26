@@ -190,6 +190,23 @@ class Win32Scratch:
         )
 
 
+def _parsed_config_alias(field_name):
+    """Alias an EsportsIsolatorPro attribute to a ParsedConfig field.
+
+    Reads come from self._parsed_config, and writes (tests toggling
+    isolator.games, _register_capability_defaults forcing
+    event_backend="poll") go back into it — so the parsed dataclass stays
+    the single source of truth instead of an init-time copy that can drift.
+    """
+    def _get(self):
+        return getattr(self._parsed_config, field_name)
+
+    def _set(self, value):
+        setattr(self._parsed_config, field_name, value)
+
+    return property(_get, _set)
+
+
 class EsportsIsolatorPro(
     BaseMixin,
     DiscoveryMixin,
@@ -199,6 +216,36 @@ class EsportsIsolatorPro(
     TuningMixin,
     RuntimeMixin,
 ):
+    # ParsedConfig-backed aliases (see _parsed_config_alias above). The
+    # anti_cheat_mode field is NOT aliased: __init__ validates it and stores
+    # the sanitized value as a plain attribute.
+    games = _parsed_config_alias("games")
+    auto_detect_steam = _parsed_config_alias("auto_detect_steam")
+    auto_detect_epic = _parsed_config_alias("auto_detect_epic")
+    steam_library_paths = _parsed_config_alias("steam_library_paths")
+    epic_library_paths = _parsed_config_alias("epic_library_paths")
+    app_profiles = _parsed_config_alias("app_profiles")
+    housekeeping_core_count = _parsed_config_alias("housekeeping_core_count")
+    poll_interval_idle_s = _parsed_config_alias("poll_interval_idle_s")
+    poll_interval_active_s = _parsed_config_alias("poll_interval_active_s")
+    enable_background_jailing = _parsed_config_alias("enable_background_jailing")
+    maintenance_jail_batch_size = _parsed_config_alias("maintenance_jail_batch_size")
+    maintenance_jail_interval_s = _parsed_config_alias("maintenance_jail_interval_s")
+    maintenance_jail_batch_cooldown_s = _parsed_config_alias("maintenance_jail_batch_cooldown_s")
+    game_close_debounce_s = _parsed_config_alias("game_close_debounce_s")
+    game_exit_restore_delay_s = _parsed_config_alias("game_exit_restore_delay_s")
+    gc_full_collect_interval_s = _parsed_config_alias("gc_full_collect_interval_s")
+    maintenance_skip_after_quiet_cycles = _parsed_config_alias("maintenance_skip_after_quiet_cycles")
+    event_backend = _parsed_config_alias("event_backend")
+    allow_mmcss_injection = _parsed_config_alias("allow_mmcss_injection")
+    _disable_timer_resolution_tweak = _parsed_config_alias("disable_timer_resolution_tweak")
+    _disable_game_priority_boost = _parsed_config_alias("disable_game_priority_boost")
+    # WHY: Escape hatch for the user-reported issue where Windows /
+    # third-party tools accumulated multiple "Ultimate Performance"
+    # power plans over time. Setting this to True skips the power-
+    # scheme switch entirely, leaving the user's plan untouched.
+    _disable_power_scheme_switch = _parsed_config_alias("disable_power_scheme_switch")
+
     def __init__(self, config_path="config.json", scan_game_libraries=True):
         try:
             sys.stdout.reconfigure(encoding="utf-8")
@@ -206,40 +253,16 @@ class EsportsIsolatorPro(
             pass
         self.config_path = config_path
         self.config = self._load_config()
+        # The ParsedConfig-backed attributes (games, auto_detect_*, poll
+        # intervals, ...) are class-level property aliases over this dataclass;
+        # no per-field copies are made here.
         self._parsed_config = ParsedConfig.from_config(self, self.config)
-        parsed = self._parsed_config
-        self.games = parsed.games
-        self.auto_detect_steam = parsed.auto_detect_steam
-        self.auto_detect_epic = parsed.auto_detect_epic
-        self.steam_library_paths = parsed.steam_library_paths
-        self.epic_library_paths = parsed.epic_library_paths
-        self.app_profiles = parsed.app_profiles
-        self.housekeeping_core_count = parsed.housekeeping_core_count
-        self.poll_interval_idle_s = parsed.poll_interval_idle_s
-        self.poll_interval_active_s = parsed.poll_interval_active_s
-        self.enable_background_jailing = parsed.enable_background_jailing
-        self.maintenance_jail_batch_size = parsed.maintenance_jail_batch_size
-        self.maintenance_jail_interval_s = parsed.maintenance_jail_interval_s
-        self.maintenance_jail_batch_cooldown_s = parsed.maintenance_jail_batch_cooldown_s
-        self._disable_timer_resolution_tweak = parsed.disable_timer_resolution_tweak
-        self._disable_game_priority_boost = parsed.disable_game_priority_boost
-        self.game_close_debounce_s = parsed.game_close_debounce_s
-        self.game_exit_restore_delay_s = parsed.game_exit_restore_delay_s
-        self.gc_full_collect_interval_s = parsed.gc_full_collect_interval_s
-        self.maintenance_skip_after_quiet_cycles = parsed.maintenance_skip_after_quiet_cycles
         self._log_file_path = None
         self._log_file_handle = None
         self._log_use_timestamp = False
         log_file = self.config.get("log_file")
         if isinstance(log_file, str) and log_file.strip():
             self.set_log_file(log_file.strip())
-        self.event_backend = parsed.event_backend
-        self.allow_mmcss_injection = parsed.allow_mmcss_injection
-        # WHY: Escape hatch for the user-reported issue where Windows /
-        # third-party tools accumulated multiple "Ultimate Performance"
-        # power plans over time. Setting this to True skips the power-
-        # scheme switch entirely, leaving the user's plan untouched.
-        self._disable_power_scheme_switch = parsed.disable_power_scheme_switch
         self.protected_exact = {
             "system", "registry", "smss.exe", "csrss.exe", "wininit.exe", "services.exe",
             "lsass.exe", "lsaiso.exe", "winlogon.exe", "svchost.exe", "spoolsv.exe", "dwm.exe",
@@ -326,7 +349,7 @@ class EsportsIsolatorPro(
         self._reported_failure_message_chars = 96
         self._reported_failure_prune_interval_s = 60.0
         self._last_reported_failure_prune = 0.0
-        anti_cheat_mode = parsed.anti_cheat_mode
+        anti_cheat_mode = self._parsed_config.anti_cheat_mode
         if anti_cheat_mode not in ("aggressive", "conservative"):
             self._log_once(
                 ("anti_cheat_mode_invalid", anti_cheat_mode),
