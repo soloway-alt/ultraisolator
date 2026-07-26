@@ -8,7 +8,9 @@ const BROWSER_CHANNEL = process.env.EII_PLAYWRIGHT_CHANNEL || 'chrome';
 
 module.exports = defineConfig({
   testDir: './tests',
-  outputDir: path.join(os.tmpdir(), 'ultraisolator-playwright-results'),
+  // CI overrides this to a workspace path so failure artifacts (diffs,
+  // traces) can be uploaded; locally results stay out of the repo.
+  outputDir: process.env.EII_PLAYWRIGHT_OUTPUT || path.join(os.tmpdir(), 'ultraisolator-playwright-results'),
   timeout: 60000,
   fullyParallel: false,
   workers: 1,
@@ -47,9 +49,12 @@ module.exports = defineConfig({
   expect: {
     timeout: 10000,
     toHaveScreenshot: {
-      // Byte-identical: the visual baselines are the sole oracle for the
-      // CSS flatten, so no drift is tolerated.
-      maxDiffPixelRatio: 0
+      // Locally the baselines are a byte-identical oracle (this is what
+      // verified the CSS flatten). CI uses the runner's system Chrome
+      // (channel: 'chrome'), whose version and font rasterization vary
+      // between runner images, so cross-machine antialiasing noise needs the
+      // historical 0.5% allowance there.
+      maxDiffPixelRatio: process.env.CI ? 0.005 : 0
     }
   }
 });

@@ -100,9 +100,13 @@ jobs:
 
       - name: Run visual regression tests
         run: npm --prefix ui run test:visual
+        env:
+          EII_PLAYWRIGHT_OUTPUT: test-results
 
       - name: Run accessibility tests
         run: npm --prefix ui run test:a11y
+        env:
+          EII_PLAYWRIGHT_OUTPUT: test-results
 
       - name: Upload Playwright report on failure
         if: failure()
