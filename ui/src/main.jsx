@@ -2,7 +2,6 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './carbon.scss';
 import './styles.css';
-import './premium.css';
 import App from './App.jsx';
 import { AppSettingsProvider } from './state/AppSettingsContext.jsx';
 

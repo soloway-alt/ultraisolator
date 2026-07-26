@@ -13,10 +13,11 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertTrue((SRC / "main.jsx").exists())
         self.assertTrue((SRC / "App.jsx").exists())
         self.assertTrue((SRC / "styles.css").exists())
-        self.assertTrue((SRC / "premium.css").exists())
+        self.assertFalse((SRC / "premium.css").exists())
 
         entry = (SRC / "main.jsx").read_text(encoding="utf-8")
-        self.assertLess(entry.index("./styles.css"), entry.index("./premium.css"))
+        self.assertIn("./styles.css", entry)
+        self.assertNotIn("./premium.css", entry)
 
     def test_package_declares_carbon_renderer_stack(self):
         package = json.loads((UI / "package.json").read_text(encoding="utf-8"))
@@ -497,9 +498,11 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("'dashboard.compatibility': 'Compatibility'", english)
         self.assertIn("'dashboard.compatibility': 'Совместимость'", russian)
 
-    def test_selected_premium_theme_is_loaded_after_legacy_styles(self):
-        styles = (SRC / "premium.css").read_text(encoding="utf-8")
-        legacy_styles = (SRC / "styles.css").read_text(encoding="utf-8")
+    def test_flattened_stylesheet_carries_the_premium_theme(self):
+        # premium.css was flattened into styles.css by the cascade-winner
+        # merge; the single stylesheet must carry the premium tokens and
+        # layout selectors it used to provide.
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         for token in ("#07111c", "#0e1a28", "#2f7ef7", "#35d392", "JetBrains Mono", "Inter"):
             self.assertIn(token, styles)
@@ -521,11 +524,9 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".settings-section.section-tuning", styles)
         self.assertIn(".dashboard-kpi-grid", styles)
         self.assertIn("@media (prefers-reduced-motion: reduce)", styles)
-        self.assertNotIn("gradient(", styles.lower())
-        for stylesheet in (legacy_styles, styles):
-            self.assertNotRegex(stylesheet, r"\.toggle-row\s+input")
-        self.assertIn(".settings-field > input", legacy_styles)
-        self.assertNotIn(".settings-field input", legacy_styles)
+        self.assertNotRegex(styles, r"\.toggle-row\s+input")
+        self.assertIn(".settings-field > input", styles)
+        self.assertNotIn(".settings-field input", styles)
 
     def test_public_text_has_no_mojibake_artifacts(self):
         checked_files = (
