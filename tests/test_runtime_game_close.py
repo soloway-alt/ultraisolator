@@ -87,8 +87,16 @@ class MonitorLoopGameCloseTests(unittest.TestCase):
         )
         isolator.messages = []
         isolator._log = isolator.messages.append
+        # All providers off: an enabled provider with a stale scan timestamp
+        # would make the loop spawn the async library-scan worker and consume
+        # the mocked time.monotonic side effects.
         isolator.auto_detect_steam = False
         isolator.auto_detect_epic = False
+        isolator.auto_detect_gog = False
+        isolator.auto_detect_ea = False
+        isolator.auto_detect_battlenet = False
+        isolator.auto_detect_ubisoft = False
+        isolator.auto_detect_xbox = False
         isolator.enable_background_jailing = False
         isolator.poll_interval_active_s = 2.0
         isolator.poll_interval_idle_s = 2.0

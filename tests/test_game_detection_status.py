@@ -10,6 +10,20 @@ from isolator.outcomes import TuningState
 from server.readiness import build_readiness_payload
 
 
+def _disable_library_autodetect(isolator):
+    """Keep monitor-loop tests deterministic: any enabled provider with a
+    stale scan timestamp makes the loop spawn the async library-scan worker,
+    which would consume mocked time.monotonic side effects and hit the real
+    registry/disk."""
+    isolator.auto_detect_steam = False
+    isolator.auto_detect_epic = False
+    isolator.auto_detect_gog = False
+    isolator.auto_detect_ea = False
+    isolator.auto_detect_battlenet = False
+    isolator.auto_detect_ubisoft = False
+    isolator.auto_detect_xbox = False
+
+
 class GameObservationStatusTests(unittest.TestCase):
     def make_isolator(self):
         return EsportsIsolatorPro(
@@ -133,8 +147,7 @@ class GameObservationStatusTests(unittest.TestCase):
 
         isolator._stop_event = OneLoopStop()
         isolator._last_topology_refresh = 10**12
-        isolator.auto_detect_steam = False
-        isolator.auto_detect_epic = False
+        _disable_library_autodetect(isolator)
         isolator.games = {"cs2.exe"}
         isolator._get_processes = lambda: [(4242, "cs2.exe")]
         isolator._open_process = lambda *_args, **_kwargs: None
@@ -176,6 +189,7 @@ class GameObservationStatusTests(unittest.TestCase):
                 isolator._last_topology_refresh = 10**12
                 isolator._last_steam_scan = 10**12
                 isolator._last_epic_scan = 10**12
+                _disable_library_autodetect(isolator)
                 isolator.auto_detect_steam = provider == "steam"
                 isolator.auto_detect_epic = provider == "epic"
                 isolator.games = set()
@@ -215,8 +229,7 @@ class GameObservationStatusTests(unittest.TestCase):
         restored = []
         isolator._stop_event = TwoLoopStop()
         isolator._last_topology_refresh = 10**12
-        isolator.auto_detect_steam = False
-        isolator.auto_detect_epic = False
+        _disable_library_autodetect(isolator)
         isolator.games = {"cs2.exe"}
         isolator._get_processes = lambda: next(snapshots)
         isolator._open_process = lambda *_args, **_kwargs: None
@@ -252,8 +265,7 @@ class GameObservationStatusTests(unittest.TestCase):
         restored = []
         isolator._stop_event = ThreeLoopStop()
         isolator._last_topology_refresh = 10**12
-        isolator.auto_detect_steam = False
-        isolator.auto_detect_epic = False
+        _disable_library_autodetect(isolator)
         isolator.games = {"cs2.exe"}
         isolator.game_close_debounce_s = 3.0
         isolator._get_processes = lambda: next(snapshots)
