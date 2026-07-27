@@ -67,7 +67,11 @@ export const CONFIG_SECTIONS = [
       'maintenance_jail_batch_size',
       'maintenance_jail_interval_ms',
       'maintenance_jail_batch_cooldown_ms',
-      'maintenance_skip_after_quiet_cycles'
+      'maintenance_skip_after_quiet_cycles',
+      'enable_probalance',
+      'probalance_cpu_threshold_pct',
+      'probalance_sustain_cycles',
+      'probalance_restore_cycles'
     ]
   },
   {
@@ -115,6 +119,10 @@ export const FIELD_LABELS = {
   maintenance_jail_interval_ms: 'Background review interval',
   maintenance_jail_batch_cooldown_ms: 'Pause between background passes',
   maintenance_skip_after_quiet_cycles: 'Pause after quiet passes',
+  enable_probalance: 'Restrain busy background apps automatically',
+  probalance_cpu_threshold_pct: 'CPU restraint threshold (%)',
+  probalance_sustain_cycles: 'Busy checks before restraining',
+  probalance_restore_cycles: 'Calm checks before releasing',
   poll_interval_active_ms: 'Game detection interval',
   poll_interval_idle_ms: 'Idle detection interval',
   housekeeping_cores: 'System-reserved CPU cores',
@@ -142,6 +150,7 @@ export const FIELD_HINTS = {
   steam_library_paths: 'One Steam library folder per line.',
   epic_library_paths: 'One Epic library folder per line.',
   protected_extra: 'Apps that must always remain unchanged, one name per line.',
+  enable_probalance: 'Temporarily lowers the priority of background apps that keep using CPU during a game. Fully reversible when the app calms down or the game closes.',
   log_file: 'Leave empty to disable file logging.',
   allow_mmcss_injection: 'Advanced Windows multimedia scheduling option.'
 };

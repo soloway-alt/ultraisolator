@@ -42,6 +42,10 @@ class ParsedConfig:
     maintenance_jail_batch_size: int
     maintenance_jail_interval_s: float
     maintenance_jail_batch_cooldown_s: float
+    enable_probalance: bool
+    probalance_cpu_threshold_pct: int
+    probalance_sustain_cycles: int
+    probalance_restore_cycles: int
     disable_timer_resolution_tweak: bool
     disable_game_priority_boost: bool
     game_close_debounce_s: float
@@ -102,6 +106,10 @@ class ParsedConfig:
             maintenance_jail_batch_size=max(1, owner._safe_int(config.get("maintenance_jail_batch_size", DEFAULT_CONFIG["maintenance_jail_batch_size"]), DEFAULT_CONFIG["maintenance_jail_batch_size"])),
             maintenance_jail_interval_s=max(5.0, owner._safe_int(config.get("maintenance_jail_interval_ms", DEFAULT_CONFIG["maintenance_jail_interval_ms"]), DEFAULT_CONFIG["maintenance_jail_interval_ms"]) / 1000.0),
             maintenance_jail_batch_cooldown_s=max(1.0, owner._safe_int(config.get("maintenance_jail_batch_cooldown_ms", DEFAULT_CONFIG["maintenance_jail_batch_cooldown_ms"]), DEFAULT_CONFIG["maintenance_jail_batch_cooldown_ms"]) / 1000.0),
+            enable_probalance=bool(config.get("enable_probalance", DEFAULT_CONFIG["enable_probalance"])),
+            probalance_cpu_threshold_pct=owner._safe_int(config.get("probalance_cpu_threshold_pct", DEFAULT_CONFIG["probalance_cpu_threshold_pct"]), DEFAULT_CONFIG["probalance_cpu_threshold_pct"]),
+            probalance_sustain_cycles=owner._safe_int(config.get("probalance_sustain_cycles", DEFAULT_CONFIG["probalance_sustain_cycles"]), DEFAULT_CONFIG["probalance_sustain_cycles"]),
+            probalance_restore_cycles=owner._safe_int(config.get("probalance_restore_cycles", DEFAULT_CONFIG["probalance_restore_cycles"]), DEFAULT_CONFIG["probalance_restore_cycles"]),
             disable_timer_resolution_tweak=bool(config.get("disable_timer_resolution_tweak", DEFAULT_CONFIG["disable_timer_resolution_tweak"])),
             disable_game_priority_boost=bool(config.get("disable_game_priority_boost", DEFAULT_CONFIG["disable_game_priority_boost"])),
             game_close_debounce_s=max(0.0, owner._safe_int(config.get("game_close_debounce_s", DEFAULT_CONFIG["game_close_debounce_s"]), DEFAULT_CONFIG["game_close_debounce_s"])),
@@ -237,6 +245,10 @@ class EsportsIsolatorPro(
     maintenance_jail_batch_size = _parsed_config_alias("maintenance_jail_batch_size")
     maintenance_jail_interval_s = _parsed_config_alias("maintenance_jail_interval_s")
     maintenance_jail_batch_cooldown_s = _parsed_config_alias("maintenance_jail_batch_cooldown_s")
+    enable_probalance = _parsed_config_alias("enable_probalance")
+    probalance_cpu_threshold_pct = _parsed_config_alias("probalance_cpu_threshold_pct")
+    probalance_sustain_cycles = _parsed_config_alias("probalance_sustain_cycles")
+    probalance_restore_cycles = _parsed_config_alias("probalance_restore_cycles")
     game_close_debounce_s = _parsed_config_alias("game_close_debounce_s")
     game_exit_restore_delay_s = _parsed_config_alias("game_exit_restore_delay_s")
     gc_full_collect_interval_s = _parsed_config_alias("gc_full_collect_interval_s")

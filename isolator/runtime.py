@@ -577,9 +577,7 @@ class RuntimeMixin:
         front, and pids already touched by any other source are never
         restrained.
         """
-        # NOTE: getattr guard until the ProBalance config fields land in
-        # ParsedConfig; the default keeps the feature off.
-        if not getattr(self, "enable_probalance", False):
+        if not self.enable_probalance:
             return
         if not cycle.current_game_pids:
             # Game-mode exit restores every touched process (any source) via
@@ -777,13 +775,8 @@ class RuntimeMixin:
             # ProBalance samples every cycle (game or idle) so the CPU-delta
             # baselines are already warm when game mode starts; the compute
             # is skipped entirely while the feature is off so the hot loop
-            # stays unchanged for everyone else. (getattr until the config
-            # fields land in ParsedConfig.)
-            cpu_samples = (
-                self._compute_cpu_samples(cycle, now)
-                if getattr(self, "enable_probalance", False)
-                else {}
-            )
+            # stays unchanged for everyone else.
+            cpu_samples = self._compute_cpu_samples(cycle, now) if self.enable_probalance else {}
             try:
                 self._advance_game_tracking(cycle, now, processes)
                 self._advance_game_mode(cycle, now, processes)
