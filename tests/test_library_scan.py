@@ -3,6 +3,7 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 from isolator.app import EsportsIsolatorPro
@@ -16,15 +17,27 @@ def _make_isolator():
 
 
 class LibraryScanWorkerTests(unittest.TestCase):
+    # Xbox is default-OFF, so the constructor scan covers the six default-ON
+    # providers.
+    _DEFAULT_ON_SCANNERS = (
+        "_scan_steam_games",
+        "_scan_epic_games",
+        "_scan_gog_games",
+        "_scan_ea_games",
+        "_scan_battlenet_games",
+        "_scan_ubisoft_games",
+    )
+
     def test_constructor_scan_runs_on_worker_thread_and_sets_ready(self):
         scan_threads = []
 
         def record_scan(self, force=False):
             scan_threads.append(threading.current_thread().name)
 
-        with patch.object(EsportsIsolatorPro, "_scan_steam_games", record_scan), patch.object(
-            EsportsIsolatorPro, "_scan_epic_games", record_scan
-        ):
+        with ExitStack() as stack:
+            for scanner in self._DEFAULT_ON_SCANNERS:
+                stack.enter_context(patch.object(EsportsIsolatorPro, scanner, record_scan))
+            stack.enter_context(patch.object(EsportsIsolatorPro, "_scan_xbox_games", record_scan))
             isolator = EsportsIsolatorPro(
                 config_path="__no_local_config__.json",
                 scan_game_libraries=True,
@@ -32,7 +45,7 @@ class LibraryScanWorkerTests(unittest.TestCase):
             self.assertTrue(isolator._library_scan_ready.wait(5))
             isolator._library_scan_thread.join(timeout=5)
 
-        self.assertEqual(["IsolatorLibraryScan", "IsolatorLibraryScan"], scan_threads)
+        self.assertEqual(["IsolatorLibraryScan"] * len(self._DEFAULT_ON_SCANNERS), scan_threads)
 
     def test_constructor_without_scan_marks_ready_immediately(self):
         isolator = _make_isolator()

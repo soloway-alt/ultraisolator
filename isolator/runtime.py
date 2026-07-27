@@ -155,8 +155,6 @@ class RuntimeHost(Protocol):
     _path_classification_cache: dict
     _protected_cache: dict
     _library_scan_ready: threading.Event
-    _last_steam_scan: float
-    _last_epic_scan: float
     _last_topology_refresh: float
     _last_fg_transition_time: float
     _foreground_transition_debounce_s: float
@@ -181,6 +179,7 @@ class RuntimeHost(Protocol):
     def _is_game_name(self, name): ...
     def _is_game_name_normalized(self, normalized): ...
     def _request_library_scan(self, force=False): ...
+    def _library_scan_due(self, now): ...
     # TuningMixin
     def _isolate_background(self, max_new=None, log_names=False, processes=None): ...
     def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0, source="jail"): ...
@@ -748,9 +747,7 @@ class RuntimeMixin:
             # Library refreshes run on the scan worker so the poll loop —
             # responsible for game launch/exit detection and the debounced
             # restore — never stalls on filesystem walks.
-            if (self.auto_detect_steam and now - self._last_steam_scan > 300.0) or (
-                self.auto_detect_epic and now - self._last_epic_scan > 300.0
-            ):
+            if self._library_scan_due(now):
                 self._request_library_scan()
 
             # An empty SPI result is an enumeration failure, not proof that every

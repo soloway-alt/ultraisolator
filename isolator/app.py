@@ -32,6 +32,11 @@ class ParsedConfig:
     games: set
     auto_detect_steam: bool
     auto_detect_epic: bool
+    auto_detect_gog: bool
+    auto_detect_ea: bool
+    auto_detect_battlenet: bool
+    auto_detect_ubisoft: bool
+    auto_detect_xbox: bool
     steam_library_paths: list
     epic_library_paths: list
     app_profiles: dict
@@ -96,6 +101,11 @@ class ParsedConfig:
             games={owner._normalize_game_name(name) for name in config.get("games", DEFAULT_CONFIG["games"])},
             auto_detect_steam=bool(config.get("auto_detect_steam_games", DEFAULT_CONFIG["auto_detect_steam_games"])),
             auto_detect_epic=bool(config.get("auto_detect_epic_games", DEFAULT_CONFIG["auto_detect_epic_games"])),
+            auto_detect_gog=bool(config.get("auto_detect_gog_games", DEFAULT_CONFIG["auto_detect_gog_games"])),
+            auto_detect_ea=bool(config.get("auto_detect_ea_games", DEFAULT_CONFIG["auto_detect_ea_games"])),
+            auto_detect_battlenet=bool(config.get("auto_detect_battlenet_games", DEFAULT_CONFIG["auto_detect_battlenet_games"])),
+            auto_detect_ubisoft=bool(config.get("auto_detect_ubisoft_games", DEFAULT_CONFIG["auto_detect_ubisoft_games"])),
+            auto_detect_xbox=bool(config.get("auto_detect_xbox_games", DEFAULT_CONFIG["auto_detect_xbox_games"])),
             steam_library_paths=config.get("steam_library_paths", DEFAULT_CONFIG["steam_library_paths"]),
             epic_library_paths=config.get("epic_library_paths", DEFAULT_CONFIG["epic_library_paths"]),
             app_profiles=cls._parse_app_profiles(owner, config),
@@ -152,8 +162,18 @@ class RuntimeState:
     last_topology_refresh: float = 0.0
     last_steam_scan: float = float("-inf")
     last_epic_scan: float = float("-inf")
+    last_gog_scan: float = float("-inf")
+    last_ea_scan: float = float("-inf")
+    last_battlenet_scan: float = float("-inf")
+    last_ubisoft_scan: float = float("-inf")
+    last_xbox_scan: float = float("-inf")
     steam_games_cache: set = field(default_factory=set)
     epic_games_cache: set = field(default_factory=set)
+    gog_games_cache: set = field(default_factory=set)
+    ea_games_cache: set = field(default_factory=set)
+    battlenet_games_cache: set = field(default_factory=set)
+    ubisoft_games_cache: set = field(default_factory=set)
+    xbox_games_cache: set = field(default_factory=set)
     library_scan_ready: object = field(default_factory=threading.Event)
     library_scan_thread: object = None
     discovery_issues: list = field(default_factory=list)
@@ -235,6 +255,11 @@ class EsportsIsolatorPro(
     games = _parsed_config_alias("games")
     auto_detect_steam = _parsed_config_alias("auto_detect_steam")
     auto_detect_epic = _parsed_config_alias("auto_detect_epic")
+    auto_detect_gog = _parsed_config_alias("auto_detect_gog")
+    auto_detect_ea = _parsed_config_alias("auto_detect_ea")
+    auto_detect_battlenet = _parsed_config_alias("auto_detect_battlenet")
+    auto_detect_ubisoft = _parsed_config_alias("auto_detect_ubisoft")
+    auto_detect_xbox = _parsed_config_alias("auto_detect_xbox")
     steam_library_paths = _parsed_config_alias("steam_library_paths")
     epic_library_paths = _parsed_config_alias("epic_library_paths")
     app_profiles = _parsed_config_alias("app_profiles")
@@ -385,8 +410,18 @@ class EsportsIsolatorPro(
         self._last_topology_refresh = state.last_topology_refresh
         self._last_steam_scan = state.last_steam_scan
         self._last_epic_scan = state.last_epic_scan
+        self._last_gog_scan = state.last_gog_scan
+        self._last_ea_scan = state.last_ea_scan
+        self._last_battlenet_scan = state.last_battlenet_scan
+        self._last_ubisoft_scan = state.last_ubisoft_scan
+        self._last_xbox_scan = state.last_xbox_scan
         self._steam_games_cache = state.steam_games_cache
         self._epic_games_cache = state.epic_games_cache
+        self._gog_games_cache = state.gog_games_cache
+        self._ea_games_cache = state.ea_games_cache
+        self._battlenet_games_cache = state.battlenet_games_cache
+        self._ubisoft_games_cache = state.ubisoft_games_cache
+        self._xbox_games_cache = state.xbox_games_cache
         self._library_scan_ready = state.library_scan_ready
         self._library_scan_thread = state.library_scan_thread
         self._discovery_issues = state.discovery_issues
@@ -430,7 +465,12 @@ class EsportsIsolatorPro(
         # background jailing waits on _library_scan_ready so an auto-detected
         # game can never be classified as background before the caches are
         # warm — the same safety the old synchronous scan provided.
-        if scan_game_libraries and (self.auto_detect_steam or self.auto_detect_epic):
+        auto_detect_enabled = (
+            self.auto_detect_steam or self.auto_detect_epic or self.auto_detect_gog
+            or self.auto_detect_ea or self.auto_detect_battlenet
+            or self.auto_detect_ubisoft or self.auto_detect_xbox
+        )
+        if scan_game_libraries and auto_detect_enabled:
             self._request_library_scan(force=True)
         else:
             self._library_scan_ready.set()

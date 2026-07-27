@@ -64,6 +64,11 @@ class DiscoveryHost(Protocol):
     games: set
     auto_detect_steam: bool
     auto_detect_epic: bool
+    auto_detect_gog: bool
+    auto_detect_ea: bool
+    auto_detect_battlenet: bool
+    auto_detect_ubisoft: bool
+    auto_detect_xbox: bool
     steam_library_paths: list
     epic_library_paths: list
     app_profiles: dict
@@ -77,8 +82,18 @@ class DiscoveryHost(Protocol):
     _library_scan_thread: threading.Thread | None
     _last_steam_scan: float
     _last_epic_scan: float
+    _last_gog_scan: float
+    _last_ea_scan: float
+    _last_battlenet_scan: float
+    _last_ubisoft_scan: float
+    _last_xbox_scan: float
     _steam_games_cache: set
     _epic_games_cache: set
+    _gog_games_cache: set
+    _ea_games_cache: set
+    _battlenet_games_cache: set
+    _ubisoft_games_cache: set
+    _xbox_games_cache: set
     _discovery_issues: list
     _protected_cache: dict
     # NOTE: host-seeded but PUBLISHED by this mixin — _get_processes rewrites
@@ -147,10 +162,36 @@ class DiscoveryMixin:
                 self._scan_steam_games(force=force or self._last_steam_scan == float("-inf"))
             if self.auto_detect_epic:
                 self._scan_epic_games(force=force or self._last_epic_scan == float("-inf"))
+            if self.auto_detect_gog:
+                self._scan_gog_games(force=force or self._last_gog_scan == float("-inf"))
+            if self.auto_detect_ea:
+                self._scan_ea_games(force=force or self._last_ea_scan == float("-inf"))
+            if self.auto_detect_battlenet:
+                self._scan_battlenet_games(force=force or self._last_battlenet_scan == float("-inf"))
+            if self.auto_detect_ubisoft:
+                self._scan_ubisoft_games(force=force or self._last_ubisoft_scan == float("-inf"))
+            if self.auto_detect_xbox:
+                self._scan_xbox_games(force=force or self._last_xbox_scan == float("-inf"))
         finally:
             # Background jailing waits on this so an auto-detected game can
             # never be classified as background before the caches are warm.
             self._library_scan_ready.set()
+
+    def _library_scan_due(self, now):
+        """True when any enabled provider's periodic library refresh is due.
+
+        Keeps the monitor loop's refresh gate readable now that seven
+        providers carry their own throttle timestamps.
+        """
+        return (
+            (self.auto_detect_steam and now - self._last_steam_scan > 300.0)
+            or (self.auto_detect_epic and now - self._last_epic_scan > 300.0)
+            or (self.auto_detect_gog and now - self._last_gog_scan > 300.0)
+            or (self.auto_detect_ea and now - self._last_ea_scan > 300.0)
+            or (self.auto_detect_battlenet and now - self._last_battlenet_scan > 300.0)
+            or (self.auto_detect_ubisoft and now - self._last_ubisoft_scan > 300.0)
+            or (self.auto_detect_xbox and now - self._last_xbox_scan > 300.0)
+        )
     def _clear_discovery_issues(self, provider):
         prefix = f"{provider}_"
         with self._state_lock:
@@ -204,6 +245,16 @@ class DiscoveryMixin:
         if self.auto_detect_steam and normalized in self._steam_games_cache:
             return True
         if self.auto_detect_epic and normalized in self._epic_games_cache:
+            return True
+        if self.auto_detect_gog and normalized in self._gog_games_cache:
+            return True
+        if self.auto_detect_ea and normalized in self._ea_games_cache:
+            return True
+        if self.auto_detect_battlenet and normalized in self._battlenet_games_cache:
+            return True
+        if self.auto_detect_ubisoft and normalized in self._ubisoft_games_cache:
+            return True
+        if self.auto_detect_xbox and normalized in self._xbox_games_cache:
             return True
         return False
 
@@ -624,6 +675,144 @@ class DiscoveryMixin:
         if "\\epic games\\" in p:
             return True
         return os.path.basename(p) in self._epic_games_cache
+
+    def _enum_registry_install_dirs(self, key_path, value_name):
+        """Enumerate HKLM\\<key_path> subkeys and collect <value_name> paths.
+
+        Shared root discovery for the registry-based launcher scanners (GOG,
+        EA, Battle.net, Ubisoft). A missing hive or an unreadable subkey is
+        normal on machines without that launcher, so per-key failures stay
+        silent; the caller records the provider-level discovery issue when
+        the final root list is empty.
+        """
+        roots = []
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
+                index = 0
+                while True:
+                    try:
+                        subkey_name = winreg.EnumKey(key, index)
+                    except OSError:
+                        break
+                    index += 1
+                    try:
+                        with winreg.OpenKey(key, subkey_name) as subkey:
+                            value = winreg.QueryValueEx(subkey, value_name)[0]
+                    except Exception:
+                        continue
+                    if isinstance(value, str) and value.strip():
+                        normalized = os.path.normpath(value.strip())
+                        if normalized not in roots:
+                            roots.append(normalized)
+        except Exception:
+            pass
+        return roots
+
+    def _gog_library_roots(self):
+        # GOG Galaxy writes one subkey per installed game with its "path".
+        roots = self._enum_registry_install_dirs(r"SOFTWARE\WOW6432Node\GOG.com\Games", "path")
+        for root in self._enum_registry_install_dirs(r"SOFTWARE\GOG.com\Games", "path"):
+            if root not in roots:
+                roots.append(root)
+        return roots
+
+    def _ea_library_roots(self):
+        # Origin-era installs keep per-game "Install Dir" subkeys; EA Desktop
+        # keeps no per-game registry entries, so the default install
+        # directories are added best-effort when they exist.
+        roots = self._enum_registry_install_dirs(r"SOFTWARE\WOW6432Node\Origin Games", "Install Dir")
+        for default_dir in (r"C:\Program Files\EA Games", r"C:\Program Files (x86)\Origin Games"):
+            if default_dir not in roots and os.path.exists(default_dir):
+                roots.append(default_dir)
+        return roots
+
+    def _battlenet_library_roots(self):
+        # One subkey per Blizzard title with its "InstallPath". The
+        # %ProgramData%\Battle.net product.db alternative is a binary blob
+        # and deliberately not parsed.
+        return self._enum_registry_install_dirs(r"SOFTWARE\WOW6432Node\Blizzard Entertainment", "InstallPath")
+
+    def _ubisoft_library_roots(self):
+        # Ubisoft Connect writes one numeric subkey per install with "InstallDir".
+        return self._enum_registry_install_dirs(r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs", "InstallDir")
+
+    def _xbox_library_roots(self):
+        r"""Fixed-drive <X>:\XboxGames roots (the modern Xbox app default).
+
+        Deliberately does NOT touch C:\Program Files\WindowsApps — that tree
+        is ACL-denied even to administrators and walking it produces nothing
+        but access errors. Existence checks only, driven by the logical-drive
+        bitmask so absent drive letters are never probed.
+        """
+        roots = []
+        try:
+            drives_mask = int(kernel32.GetLogicalDrives())
+        except Exception:
+            drives_mask = 0
+        for index in range(26):
+            if not drives_mask & (1 << index):
+                continue
+            root = f"{chr(ord('A') + index)}:\\XboxGames"
+            if os.path.exists(root):
+                roots.append(root)
+        return roots
+
+    def _scan_registry_launcher(self, provider, roots):
+        """Shared scan body for the registry/default-dir launcher providers."""
+        self._clear_discovery_issues(provider)
+        if not roots:
+            self._record_discovery_issue(f"{provider}_install_not_found")
+        return self._scan_launcher_library(provider, roots, set())
+
+    def _scan_gog_games(self, force=False):
+        now = time.monotonic()
+        if not force and (now - self._last_gog_scan) < 300:
+            return
+        self._last_gog_scan = now
+        gog_games = self._scan_registry_launcher("gog", self._gog_library_roots())
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._gog_games_cache = gog_games
+
+    def _scan_ea_games(self, force=False):
+        now = time.monotonic()
+        if not force and (now - self._last_ea_scan) < 300:
+            return
+        self._last_ea_scan = now
+        ea_games = self._scan_registry_launcher("ea", self._ea_library_roots())
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._ea_games_cache = ea_games
+
+    def _scan_battlenet_games(self, force=False):
+        now = time.monotonic()
+        if not force and (now - self._last_battlenet_scan) < 300:
+            return
+        self._last_battlenet_scan = now
+        battlenet_games = self._scan_registry_launcher("battlenet", self._battlenet_library_roots())
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._battlenet_games_cache = battlenet_games
+
+    def _scan_ubisoft_games(self, force=False):
+        now = time.monotonic()
+        if not force and (now - self._last_ubisoft_scan) < 300:
+            return
+        self._last_ubisoft_scan = now
+        ubisoft_games = self._scan_registry_launcher("ubisoft", self._ubisoft_library_roots())
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._ubisoft_games_cache = ubisoft_games
+
+    def _scan_xbox_games(self, force=False):
+        now = time.monotonic()
+        if not force and (now - self._last_xbox_scan) < 300:
+            return
+        self._last_xbox_scan = now
+        xbox_games = self._scan_registry_launcher("xbox", self._xbox_library_roots())
+        # Publish atomically for readers on the monitor/API threads.
+        with self._state_lock:
+            self._xbox_games_cache = xbox_games
 
     def _detect_protected_title(self, name):
         normalized = self._normalize_name(name)

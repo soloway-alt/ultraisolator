@@ -465,6 +465,8 @@ kernel32.GetThreadSelectedCpuSets.argtypes = [wintypes.HANDLE, ctypes.POINTER(wi
 kernel32.GetThreadSelectedCpuSets.restype = wintypes.BOOL
 kernel32.IsWow64Process.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
 kernel32.IsWow64Process.restype = wintypes.BOOL
+kernel32.GetLogicalDrives.argtypes = []
+kernel32.GetLogicalDrives.restype = wintypes.DWORD
 
 ntdll.NtQuerySystemInformation.argtypes = [wintypes.ULONG, wintypes.LPVOID, wintypes.ULONG, ctypes.POINTER(wintypes.ULONG)]
 ntdll.NtQuerySystemInformation.restype = NTSTATUS

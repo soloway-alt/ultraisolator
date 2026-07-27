@@ -13,6 +13,14 @@ DEFAULT_CONFIG = {
     ],
     "auto_detect_steam_games": True,
     "auto_detect_epic_games": True,
+    "auto_detect_gog_games": True,
+    "auto_detect_ea_games": True,
+    "auto_detect_battlenet_games": True,
+    "auto_detect_ubisoft_games": True,
+    # OFF by default: the Xbox/WindowsApps ecosystem is ACL-heavy; the scanner
+    # only walks <drive>:\XboxGames, but stays opt-in to keep default installs
+    # free of any Xbox-related probing.
+    "auto_detect_xbox_games": False,
     "steam_library_paths": [],
     "epic_library_paths": [],
     "protected_extra": [],
@@ -58,6 +66,11 @@ CONFIG_SCHEMA = {
     "games": {"type": "string_list", "restart_required": True},
     "auto_detect_steam_games": {"type": "bool", "restart_required": True},
     "auto_detect_epic_games": {"type": "bool", "restart_required": True},
+    "auto_detect_gog_games": {"type": "bool", "restart_required": True},
+    "auto_detect_ea_games": {"type": "bool", "restart_required": True},
+    "auto_detect_battlenet_games": {"type": "bool", "restart_required": True},
+    "auto_detect_ubisoft_games": {"type": "bool", "restart_required": True},
+    "auto_detect_xbox_games": {"type": "bool", "restart_required": True},
     "steam_library_paths": {"type": "string_list", "restart_required": True},
     "epic_library_paths": {"type": "string_list", "restart_required": True},
     "protected_extra": {"type": "string_list", "restart_required": True},
