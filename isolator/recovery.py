@@ -5,6 +5,7 @@ import os
 import re
 import time
 
+from .outcomes import JAIL_LIKE_SOURCES
 from .protected_state import (
     ProtectedStateError,
     is_protected_state_path_safe,
@@ -340,7 +341,7 @@ class RecoveryMixin:
         entries = {
             pid: serialized
             for pid, serialized in entries.items()
-            if serialized and serialized.get("source") == "jail"
+            if serialized and serialized.get("source") in JAIL_LIKE_SOURCES
         }
         if not entries:
             return
@@ -523,6 +524,12 @@ class RecoveryMixin:
                         f"{prefix} Skipping pid={pid}; persisted restore values are malformed.",
                     )
                     continue
+                # Restore the recorded source verbatim (jail vs probalance);
+                # anything unexpected degrades to "jail" so the entry still
+                # takes the fail-closed jail restore path.
+                saved_source = saved_entry.get("source")
+                if saved_source not in JAIL_LIKE_SOURCES:
+                    saved_source = "jail"
                 with self._state_lock:
                     self._entry_gen += 1
                     self._touched[pid] = {
@@ -530,7 +537,7 @@ class RecoveryMixin:
                         "create_time": saved_create_time or current_create_time,
                         "state": sanitized_state,
                         "threads": {},
-                        "source": "jail",
+                        "source": saved_source,
                         "gen": self._entry_gen,
                     }
             finally:

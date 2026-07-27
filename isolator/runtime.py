@@ -9,6 +9,7 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .discovery import _LAUNCHER_EXES
 from .winapi import (
     CONSOLE_CTRL_HANDLER,
     CTRL_BREAK_EVENT,
@@ -71,6 +72,14 @@ class MonitorCycle:
     # CPU% deltas from it so they never become loop-carried locals again.
     cpu_prev: dict = field(default_factory=dict)
 
+    # -- ProBalance hysteresis (persists; _advance_probalance owns) --
+    # pid -> consecutive over-threshold samples for jail candidates.
+    probalance_streaks: dict = field(default_factory=dict)
+    # pid -> consecutive under-threshold samples for restrained pids.
+    probalance_calm_streaks: dict = field(default_factory=dict)
+    # pids currently restrained by ProBalance (source="probalance").
+    probalance_jailed: set = field(default_factory=set)
+
     # -- per cycle --
     current_game_pids: set = field(default_factory=set)
     cleanup_due: bool = False
@@ -113,6 +122,10 @@ class RuntimeHost(Protocol):
     auto_detect_steam: bool
     auto_detect_epic: bool
     anti_cheat_mode: str
+    enable_probalance: bool
+    probalance_cpu_threshold_pct: int
+    probalance_sustain_cycles: int
+    probalance_restore_cycles: int
     _disable_game_priority_boost: bool
     _disable_timer_resolution_tweak: bool
     _disable_power_scheme_switch: bool
@@ -170,7 +183,7 @@ class RuntimeHost(Protocol):
     def _request_library_scan(self, force=False): ...
     # TuningMixin
     def _isolate_background(self, max_new=None, log_names=False, processes=None): ...
-    def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0): ...
+    def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0, source="jail"): ...
     def _boost_foreground(self, pid): ...
     def _find_game_process_entries(self, processes=None): ...
     def _optimize_game_with_state(self, pid, name=None, classified_as_game=False): ...
@@ -548,6 +561,107 @@ class RuntimeMixin:
                 del cpu_prev[pid]
         return samples
 
+    def _advance_probalance(self, cycle, now, processes, cpu_samples):
+        """Load-triggered restraint of background CPU hogs during game mode.
+
+        Unlike the name/policy-driven batch jail, this step reacts to
+        sustained per-process CPU load: a candidate must hold
+        probalance_cpu_threshold_pct or more for probalance_sustain_cycles
+        consecutive samples before it is jailed (source="probalance"), and a
+        restrained pid must stay below the threshold for
+        probalance_restore_cycles consecutive samples before it is released.
+        All mutation and reversal goes through _jail_process /
+        _restore_process, so the self/parent/protected/never_jail/game gates
+        and the _touched ledger apply unchanged; game pids, the current
+        foreground pid, and launcher processes are additionally excluded up
+        front, and pids already touched by any other source are never
+        restrained.
+        """
+        # NOTE: getattr guard until the ProBalance config fields land in
+        # ParsedConfig; the default keeps the feature off.
+        if not getattr(self, "enable_probalance", False):
+            return
+        if not cycle.current_game_pids:
+            # Game-mode exit restores every touched process (any source) via
+            # _advance_game_mode -> _restore_all_processes; the step only
+            # drops its own bookkeeping here.
+            if cycle.probalance_jailed or cycle.probalance_streaks or cycle.probalance_calm_streaks:
+                cycle.probalance_jailed.clear()
+                cycle.probalance_streaks.clear()
+                cycle.probalance_calm_streaks.clear()
+            return
+        if not self._library_scan_ready.is_set():
+            # Mirror _run_background_jail: an auto-detected game must never
+            # be restrained before the library caches are warm.
+            return
+
+        threshold = float(self.probalance_cpu_threshold_pct)
+        names_by_pid = {}
+        excluded = set(cycle.current_game_pids)
+        if cycle.last_fg_pid:
+            excluded.add(cycle.last_fg_pid)
+        for pid, name in processes:
+            pid = int(pid)
+            names_by_pid[pid] = name
+            if name in _LAUNCHER_EXES:
+                excluded.add(pid)
+        with self._state_lock:
+            touched_pids = set(self._touched)
+
+        streaks = cycle.probalance_streaks
+        calm_streaks = cycle.probalance_calm_streaks
+        jailed = cycle.probalance_jailed
+        for pid, pct in cpu_samples.items():
+            if pid in excluded:
+                continue
+            if pid in jailed:
+                if pct < threshold:
+                    calm_streaks[pid] = calm_streaks.get(pid, 0) + 1
+                    if calm_streaks[pid] >= self.probalance_restore_cycles:
+                        self._restore_process(pid)
+                        jailed.discard(pid)
+                        calm_streaks.pop(pid, None)
+                        name = names_by_pid.get(pid, "")
+                        self._log(
+                            f"[PROBALANCE] Released {name} (pid={pid}) after settling below {threshold:.0f}% CPU."
+                        )
+                else:
+                    calm_streaks.pop(pid, None)
+                continue
+            if pct >= threshold:
+                if pid in touched_pids:
+                    # Already tuned by another mechanism (batch jail,
+                    # foreground boost, game optimize) — never stack.
+                    continue
+                streaks[pid] = streaks.get(pid, 0) + 1
+                if streaks[pid] >= self.probalance_sustain_cycles:
+                    streaks.pop(pid, None)
+                    name = names_by_pid.get(pid, "")
+                    expected_ct = int(self._process_create_times.get(pid, 0) or 0)
+                    outcome = self._jail_process(
+                        pid,
+                        name=name,
+                        expected_create_time=expected_ct,
+                        source="probalance",
+                    )
+                    if outcome is True:
+                        jailed.add(pid)
+                        self._log(f"[PROBALANCE] Restrained {name} (pid={pid}) at {pct:.0f}% CPU.")
+            else:
+                streaks.pop(pid, None)
+
+        # Prune bookkeeping for pids that vanished from the sample set (the
+        # dead-entry cleanup owns their _touched entries).
+        for pid in list(streaks):
+            if pid not in cpu_samples:
+                del streaks[pid]
+        for pid in list(jailed):
+            if pid not in cpu_samples:
+                jailed.discard(pid)
+        for pid in list(calm_streaks):
+            if pid not in cpu_samples:
+                del calm_streaks[pid]
+
     def _advance_gc_policy(self, cycle, now):
         """GC policy while a game is active: disable the collector, then run
         cheap gen0 sweeps every 30s and a full collect on the configured
@@ -660,15 +774,23 @@ class RuntimeMixin:
             cycle.current_game_pids = set()
             cycle.cleanup_ran = False
             cycle.game_mode_entered = False
+            # ProBalance samples every cycle (game or idle) so the CPU-delta
+            # baselines are already warm when game mode starts; the compute
+            # is skipped entirely while the feature is off so the hot loop
+            # stays unchanged for everyone else. (getattr until the config
+            # fields land in ParsedConfig.)
+            cpu_samples = (
+                self._compute_cpu_samples(cycle, now)
+                if getattr(self, "enable_probalance", False)
+                else {}
+            )
             try:
                 self._advance_game_tracking(cycle, now, processes)
                 self._advance_game_mode(cycle, now, processes)
                 self._advance_maintenance_jail(cycle, now, processes)
+                self._advance_probalance(cycle, now, processes, cpu_samples)
                 self._advance_gc_policy(cycle, now)
                 self._advance_power(cycle, now)
-                # Feature seed: _advance_probalance(cycle, now, processes,
-                # cpu_samples) slots in here, between the batch jail and the
-                # foreground tracking.
                 self._advance_foreground(cycle, now)
             except Exception as exc:
                 # WHY: _log_once folds monitor exceptions by type plus a

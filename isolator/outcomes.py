@@ -17,6 +17,13 @@ class TuningState(str, enum.Enum):
     FAILED = "failed"
 
 
+# _touched sources that throttle a process the way the jail does (idle
+# priority, EcoQoS, background CPU sets). Their entries are persisted to the
+# crash-recovery jail-state file and their restores are held to the same
+# fail-closed standard in _restore_process.
+JAIL_LIKE_SOURCES = frozenset({"jail", "probalance"})
+
+
 class JailOutcome(enum.Enum):
     """Internal result of a jail attempt.
 

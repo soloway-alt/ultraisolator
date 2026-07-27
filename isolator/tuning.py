@@ -5,7 +5,7 @@ import threading
 from ctypes import wintypes
 from typing import Protocol
 
-from .outcomes import JailOutcome, TuningState
+from .outcomes import JAIL_LIKE_SOURCES, JailOutcome, TuningState
 from .types import ProcessState, TouchedEntry
 from .winapi import (
     ABOVE_NORMAL_PRIORITY_CLASS,
@@ -383,27 +383,27 @@ class TuningMixin:
             reset_affinity_mask = entry_source != "optimize_game" or bool(cpu_set_ids)
             if self._apply_process_cpu_sets(handle, cpu_set_ids, reset_affinity_mask=reset_affinity_mask):
                 restored_attrs.append("cpu_sets")
-            elif entry_source == "jail":
+            elif entry_source in JAIL_LIKE_SOURCES:
                 restore_failed = True
             if "affinity_mask" in state and reset_affinity_mask:
                 if kernel32.SetProcessAffinityMask(handle, ctypes.c_size_t(state["affinity_mask"])):
                     restored_attrs.append("affinity")
                 else:
-                    if entry_source == "jail":
+                    if entry_source in JAIL_LIKE_SOURCES:
                         restore_failed = True
                     self._log_restore_access_issue(pid, entry_name, entry_source, "SetProcessAffinityMask")
             if "priority_boost_disabled" in state:
                 if kernel32.SetProcessPriorityBoost(handle, bool(state["priority_boost_disabled"])):
                     restored_attrs.append("priority_boost")
                 else:
-                    if entry_source == "jail":
+                    if entry_source in JAIL_LIKE_SOURCES:
                         restore_failed = True
                     self._log_restore_access_issue(pid, entry_name, entry_source, "SetProcessPriorityBoost")
             if "priority_class" in state and state["priority_class"]:
                 if kernel32.SetPriorityClass(handle, state["priority_class"]):
                     restored_attrs.append(f"priority=0x{state['priority_class']:X}")
                 else:
-                    if entry_source == "jail":
+                    if entry_source in JAIL_LIKE_SOURCES:
                         restore_failed = True
                     self._log_once(("restore_priority", pid), f"[WARN] SetPriorityClass failed for pid={pid} ({entry_name}): {self._last_error_text()}")
 
@@ -463,7 +463,7 @@ class TuningMixin:
                 current = self._touched.get(pid)
                 if current is not None and current.get("gen", 0) == original_entry_gen:
                     if not restore_failed:
-                        remove_jail_state = current.get("source") == "jail"
+                        remove_jail_state = current.get("source") in JAIL_LIKE_SOURCES
                         self._touched.pop(pid, None)
             if remove_jail_state:
                 # Bulk callers pass a collector so N restores cost one batched
@@ -526,13 +526,16 @@ class TuningMixin:
         elif deferred_jail_removals:
             self._remove_jail_states(deferred_jail_removals)
 
-    def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0):
+    def _jail_process(self, pid, name=None, force=False, record_state=True, expected_create_time=0, source="jail"):
         # Public contract (pinned by tests, _isolate_background, and the
         # foreground-transition path): the impl's JailOutcome maps to a
         # legacy tri-state:
         #   JailOutcome.JAILED  → True  (jailed successfully)
         #   JailOutcome.DENIED  → None  (OpenProcess / priority write denied)
         #   JailOutcome.SKIPPED → False (caller-side gate skip)
+        # `source` labels the _touched entry ("jail" for the batch/foreground
+        # paths, "probalance" for load-triggered restraint) so restore and
+        # status reporting can tell the mechanisms apart.
         if not self._begin_process_mutation():
             return False
         try:
@@ -542,6 +545,7 @@ class TuningMixin:
                 force=force,
                 record_state=record_state,
                 expected_create_time=expected_create_time,
+                source=source,
             )
         finally:
             self._end_process_mutation()
@@ -551,7 +555,7 @@ class TuningMixin:
             return None
         return False
 
-    def _jail_process_impl(self, pid, name=None, force=False, record_state=True, expected_create_time=0):
+    def _jail_process_impl(self, pid, name=None, force=False, record_state=True, expected_create_time=0, source="jail"):
         pid = int(pid)
         if pid in (0, 4, self._self_pid, self._parent_pid):
             return JailOutcome.SKIPPED
@@ -594,7 +598,7 @@ class TuningMixin:
             # WHY: Snapshot the original state INSIDE the try/finally so a
             # failure inside _remember_process_state (e.g., ctypes alloc
             # error during _query_process_state) cannot leak the handle.
-            self._remember_process_state(pid, handle, normalized_name, source="jail")
+            self._remember_process_state(pid, handle, normalized_name, source=source)
             background_cores = self._cpu_partitions.get("background", [])
             if background_cores:
                 self._apply_process_cpu_sets(handle, background_cores)
@@ -757,8 +761,11 @@ class TuningMixin:
         touched_pids = []
         process_list = processes if processes is not None else self._get_processes()
         with self._state_lock:
+            # Includes ProBalance-restrained pids so the batch pass never
+            # re-touches (and never fights over) a process another jail-like
+            # mechanism currently owns.
             already_jailed = {
-                pid for pid, entry in self._touched.items() if entry.get("source") == "jail"
+                pid for pid, entry in self._touched.items() if entry.get("source") in JAIL_LIKE_SOURCES
             }
         is_game = self._is_game_name_normalized
         is_protected = self._is_protected_process_name
