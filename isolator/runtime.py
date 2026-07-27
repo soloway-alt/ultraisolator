@@ -66,9 +66,10 @@ class MonitorCycle:
     # -- housekeeping (persists) --
     last_cleanup: float = 0.0
 
-    # -- feature seed: ProBalance CPU-sample bookkeeping lands here as
-    #    cpu_prev: dict[pid, (busy_100ns, sampled_at)] so per-process CPU%
-    #    deltas never become loop-carried locals again. --
+    # -- ProBalance CPU-sample bookkeeping (persists) --
+    # pid -> (busy_100ns, sampled_at); _compute_cpu_samples derives per-cycle
+    # CPU% deltas from it so they never become loop-carried locals again.
+    cpu_prev: dict = field(default_factory=dict)
 
     # -- per cycle --
     current_game_pids: set = field(default_factory=set)
@@ -121,9 +122,13 @@ class RuntimeHost(Protocol):
     _parent_pid: int
     _is_admin: bool
     _fg_pid_dword: Any  # pre-allocated wintypes.DWORD
+    _logical_cpu_count: int
 
     # -- shared runtime state (RuntimeState-backed) --
     _state_lock: threading.Lock
+    # published by DiscoveryMixin._get_processes every poll cycle
+    _process_create_times: dict
+    _process_cpu_times: dict
     _mutation_idle: threading.Condition
     _active_mutations: int
     _shutting_down: bool
@@ -509,6 +514,39 @@ class RuntimeMixin:
             cycle.maintenance_idle_streak = 0
         if not cycle.maintenance_jail_backlog:
             cycle.last_background_jail = now
+
+    def _compute_cpu_samples(self, cycle, now):
+        """Derive per-process CPU% from consecutive UserTime+KernelTime reads.
+
+        Consumes self._process_cpu_times (published by _get_processes, in
+        100ns units) against the previous cycle's baselines in cycle.cpu_prev
+        and returns {pid: pct} with pct clamped to [0.0, 100.0] of TOTAL
+        machine capacity (normalized by the logical CPU count). First-seen
+        pids only seed a baseline; a non-advancing clock (dt <= 0) keeps the
+        existing baseline so the busy delta is not silently consumed.
+        Baselines for pids that disappeared from the snapshot are pruned.
+        """
+        samples = {}
+        cpu_times = self._process_cpu_times
+        cpu_prev = cycle.cpu_prev
+        # 100ns busy units -> seconds (1e7), spread over every logical CPU.
+        scale = 100.0 / (1e7 * self._logical_cpu_count)
+        for pid, busy in cpu_times.items():
+            prev = cpu_prev.get(pid)
+            if prev is None:
+                cpu_prev[pid] = (busy, now)
+                continue
+            prev_busy, prev_ts = prev
+            dt = now - prev_ts
+            if dt <= 0:
+                continue
+            cpu_prev[pid] = (busy, now)
+            pct = (busy - prev_busy) / dt * scale
+            samples[pid] = min(100.0, max(0.0, pct))
+        for pid in list(cpu_prev):
+            if pid not in cpu_times:
+                del cpu_prev[pid]
+        return samples
 
     def _advance_gc_policy(self, cycle, now):
         """GC policy while a game is active: disable the collector, then run

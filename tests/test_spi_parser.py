@@ -15,9 +15,10 @@ _ENTRY_SIZE = ctypes.sizeof(SYSTEM_PROCESS_INFORMATION)
 def _build_spi_payload(specs):
     """Serialize SYSTEM_PROCESS_INFORMATION entries the way the kernel lays them out.
 
-    Each spec: {"pid": int, "create_time": int, "name": str | None} plus an
-    optional "dangling_length" to model an entry whose ImageName.Length is
-    non-zero but whose Buffer pointer is NULL.
+    Each spec: {"pid": int, "create_time": int, "name": str | None} plus
+    optional "user_time" / "kernel_time" (100ns units) and an optional
+    "dangling_length" to model an entry whose ImageName.Length is non-zero
+    but whose Buffer pointer is NULL.
 
     Returns (payload_bytes, keepalive). The caller MUST keep `keepalive`
     referenced until _get_processes has run: the payload embeds real pointers
@@ -30,6 +31,8 @@ def _build_spi_payload(specs):
         entry.NextEntryOffset = 0 if index == len(specs) - 1 else _ENTRY_SIZE
         entry.UniqueProcessId = spec["pid"]
         entry.CreateTime = spec.get("create_time", 0)
+        entry.UserTime = spec.get("user_time", 0)
+        entry.KernelTime = spec.get("kernel_time", 0)
         name = spec.get("name")
         if name is not None:
             name_buf = ctypes.create_unicode_buffer(name)
@@ -58,8 +61,8 @@ class SpiParserTests(unittest.TestCase):
     def test_parses_pids_names_and_create_times_from_chained_entries(self):
         isolator = self._make_isolator()
         payload, keepalive = _build_spi_payload([
-            {"pid": 4242, "name": "CS2.exe", "create_time": 111111},
-            {"pid": 4300, "name": "Steam.exe", "create_time": 222222},
+            {"pid": 4242, "name": "CS2.exe", "create_time": 111111, "user_time": 5_000_000, "kernel_time": 2_000_000},
+            {"pid": 4300, "name": "Steam.exe", "create_time": 222222, "user_time": 30_000_000, "kernel_time": 10_000_000},
         ])
         calls = []
 
@@ -77,6 +80,8 @@ class SpiParserTests(unittest.TestCase):
         # Names come back lowercased via _normalize_spi_name.
         self.assertEqual([(4242, "cs2.exe"), (4300, "steam.exe")], processes)
         self.assertEqual({4242: 111111, 4300: 222222}, isolator._process_create_times)
+        # UserTime + KernelTime sums (100ns units) are published alongside.
+        self.assertEqual({4242: 7_000_000, 4300: 40_000_000}, isolator._process_cpu_times)
         self.assertEqual(1, len(calls))
         self.assertEqual(5, calls[0][0])  # SystemProcessInformation class
         del keepalive
@@ -116,10 +121,10 @@ class SpiParserTests(unittest.TestCase):
         isolator = self._make_isolator()
         payload, keepalive = _build_spi_payload([
             # System Idle style: pid 0, Length 0, NULL Buffer.
-            {"pid": 0, "name": None, "create_time": 0},
+            {"pid": 0, "name": None, "create_time": 0, "user_time": 55, "kernel_time": 66},
             # Defensive case: non-zero Length but NULL Buffer pointer.
-            {"pid": 4, "dangling_length": 12, "create_time": 333},
-            {"pid": 777, "name": "game.exe", "create_time": 444},
+            {"pid": 4, "dangling_length": 12, "create_time": 333, "kernel_time": 9},
+            {"pid": 777, "name": "game.exe", "create_time": 444, "user_time": 7},
         ])
 
         def query(_info_class, buffer, buffer_size, _returned):
@@ -136,6 +141,8 @@ class SpiParserTests(unittest.TestCase):
         # pid 0 is falsy so it must not be recorded in the create-time map.
         self.assertNotIn(0, isolator._process_create_times)
         self.assertEqual({4: 333, 777: 444}, isolator._process_create_times)
+        # Same exclusion rule for the CPU-time map; missing halves count as 0.
+        self.assertEqual({4: 9, 777: 7}, isolator._process_cpu_times)
         del keepalive
 
 

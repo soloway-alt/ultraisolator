@@ -152,6 +152,7 @@ class RuntimeState:
     known_non_games: set = field(default_factory=set)
     path_classification_cache: dict = field(default_factory=dict)
     process_create_times: dict = field(default_factory=dict)
+    process_cpu_times: dict = field(default_factory=dict)
     protected_cache: dict = field(default_factory=dict)
     entry_gen: int = 0
 
@@ -165,6 +166,8 @@ class Win32Scratch:
     spi_off_pid: int
     spi_off_name: int
     spi_off_create_time: int
+    spi_off_user_time: int
+    spi_off_kernel_time: int
     spi_ptr_size: int
     spi_struct_ulong: object
     spi_struct_ushort: object
@@ -182,6 +185,8 @@ class Win32Scratch:
             spi_off_pid=SYSTEM_PROCESS_INFORMATION.UniqueProcessId.offset,
             spi_off_name=SYSTEM_PROCESS_INFORMATION.ImageName.offset,
             spi_off_create_time=SYSTEM_PROCESS_INFORMATION.CreateTime.offset,
+            spi_off_user_time=SYSTEM_PROCESS_INFORMATION.UserTime.offset,
+            spi_off_kernel_time=SYSTEM_PROCESS_INFORMATION.KernelTime.offset,
             spi_ptr_size=ptr_size,
             spi_struct_ulong=struct.Struct('<I'),
             spi_struct_ushort=struct.Struct('<H'),
@@ -309,6 +314,9 @@ class EsportsIsolatorPro(
         self._spi_buffer = scratch.spi_buffer
         self._self_pid = int(kernel32.GetCurrentProcessId())
         self._parent_pid = int(os.getppid())
+        # WHY: Cached once — ProBalance normalizes per-process CPU-time deltas
+        # by the logical CPU count every poll cycle.
+        self._logical_cpu_count = os.cpu_count() or 1
         self._last_fg_transition_time = 0.0
         self._foreground_transition_debounce_s = 0.5
         self._state_lock = state.state_lock
@@ -373,6 +381,7 @@ class EsportsIsolatorPro(
         self._known_non_games = state.known_non_games
         self._path_classification_cache = state.path_classification_cache
         self._process_create_times = state.process_create_times
+        self._process_cpu_times = state.process_cpu_times
         self._protected_cache = state.protected_cache
         self._entry_gen = state.entry_gen
         # WHY: Pre-allocate reusable ctypes objects once instead of creating them
@@ -392,6 +401,8 @@ class EsportsIsolatorPro(
         self._spi_off_pid = scratch.spi_off_pid
         self._spi_off_name = scratch.spi_off_name
         self._spi_off_create_time = scratch.spi_off_create_time
+        self._spi_off_user_time = scratch.spi_off_user_time
+        self._spi_off_kernel_time = scratch.spi_off_kernel_time
         self._spi_ptr_size = scratch.spi_ptr_size
         # WHY: Pre-compute the struct format strings for pointer-sized reads.
         # struct.unpack_from is the zero-copy alternative to .raw + int.from_bytes.

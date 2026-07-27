@@ -84,6 +84,9 @@ class DiscoveryHost(Protocol):
     # NOTE: host-seeded but PUBLISHED by this mixin — _get_processes rewrites
     # it every poll cycle for TuningMixin's PID-reuse guards.
     _process_create_times: dict
+    # NOTE: host-seeded but PUBLISHED by this mixin — _get_processes rewrites
+    # it every poll cycle for RuntimeMixin's ProBalance CPU sampling.
+    _process_cpu_times: dict
 
     # -- SPI parsing scratch (Win32Scratch-backed) --
     _spi_buffer: Any
@@ -92,6 +95,8 @@ class DiscoveryHost(Protocol):
     _spi_off_pid: int
     _spi_off_name: int
     _spi_off_create_time: int
+    _spi_off_user_time: int
+    _spi_off_kernel_time: int
     _spi_ptr_size: int
     _spi_struct_ulong: Any
     _spi_struct_ushort: Any
@@ -264,6 +269,8 @@ class DiscoveryMixin:
         off_pid = self._spi_off_pid
         off_name = self._spi_off_name
         off_create_time = self._spi_off_create_time
+        off_user_time = self._spi_off_user_time
+        off_kernel_time = self._spi_off_kernel_time
         ptr_size = self._spi_ptr_size
         fmt_ulong = self._spi_struct_ulong.unpack_from
         fmt_ushort = self._spi_struct_ushort.unpack_from
@@ -277,6 +284,7 @@ class DiscoveryMixin:
         normalize = self._normalize_spi_name
         processes = []
         process_create_times = {}
+        process_cpu_times = {}
         processes_append = processes.append
         offset = 0
         while offset < buf_len:
@@ -297,11 +305,18 @@ class DiscoveryMixin:
                         name = ""
             if pid:
                 process_create_times[int(pid)] = int(create_time)
+                # WHY: UserTime+KernelTime (100ns units) feed ProBalance's
+                # per-process CPU% deltas; summing here keeps the hot loop to
+                # two extra fixed-offset reads per entry.
+                user_time = fmt_longlong(spi_buf, offset + off_user_time)[0]
+                kernel_time = fmt_longlong(spi_buf, offset + off_kernel_time)[0]
+                process_cpu_times[int(pid)] = int(user_time) + int(kernel_time)
             processes_append((pid, normalize(name)))
             if next_entry == 0:
                 break
             offset += next_entry
         self._process_create_times = process_create_times
+        self._process_cpu_times = process_cpu_times
 
         # WHY: Shrink the buffer AFTER parsing, not before. The old buffer holds
         # the NtQuerySystemInformation results; replacing it before the parsing
