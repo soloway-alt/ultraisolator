@@ -3,6 +3,7 @@ import { Tag } from '@carbon/react';
 import PlayIcon from '@carbon/icons-react/es/PlayFilledAlt.js';
 import StopIcon from '@carbon/icons-react/es/StopFilledAlt.js';
 import RestoreIcon from '@carbon/icons-react/es/Renew.js';
+import { GameSuggestions } from '../components/GameSuggestions.jsx';
 import { KpiCell } from '../components/KpiCell.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { ProcessTable } from '../components/ProcessTable.jsx';
@@ -232,6 +233,8 @@ export const DashboardPage = memo(function DashboardPage({ live, page }) {
       </div>
 
       {actionState.error ? <div className="action-error">{actionState.error}</div> : null}
+
+      <GameSuggestions suggestions={snapshot?.game_suggestions} />
 
       <div className="dashboard-trust-strip" aria-label={t('dashboard.trustStatus', 'Safety and trust status')}>
         <div className={`dashboard-trust-item ${!hasSnapshot ? 'is-pending' : status.admin ? 'is-ready' : 'needs-attention'}`}>

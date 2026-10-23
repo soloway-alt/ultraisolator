@@ -34,6 +34,7 @@
   "probalance_cpu_threshold_pct": 15,
   "probalance_sustain_cycles": 4,
   "probalance_restore_cycles": 3,
+  "enable_game_suggestions": true,
   "disable_timer_resolution_tweak": false,
   "disable_game_priority_boost": false,
   "game_close_debounce_s": 3,

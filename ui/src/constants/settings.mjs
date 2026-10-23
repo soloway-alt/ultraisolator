@@ -66,6 +66,7 @@ export const CONFIG_SECTIONS = [
       'auto_detect_battlenet_games',
       'auto_detect_ubisoft_games',
       'auto_detect_xbox_games',
+      'enable_game_suggestions',
       'steam_library_paths',
       'epic_library_paths'
     ]
@@ -128,6 +129,7 @@ export const FIELD_LABELS = {
   auto_detect_battlenet_games: 'Find Battle.net games automatically',
   auto_detect_ubisoft_games: 'Find Ubisoft games automatically',
   auto_detect_xbox_games: 'Find Xbox games automatically',
+  enable_game_suggestions: 'Suggest unknown fullscreen apps as games',
   steam_library_paths: 'Steam library folders',
   epic_library_paths: 'Epic library folders',
   enable_background_jailing: 'Limit background apps while gaming',
@@ -164,6 +166,7 @@ export const POSITIVE_BOOLEAN_FIELDS = new Set([
 export const FIELD_HINTS = {
   games: 'One executable per line. Names without .exe are completed automatically.',
   auto_detect_xbox_games: 'Scans the XboxGames folder on each drive. Off by default because Xbox installs use restricted Windows folders.',
+  enable_game_suggestions: 'Shows fullscreen apps that behave like games on the dashboard. Nothing changes until you confirm a suggestion.',
   steam_library_paths: 'One Steam library folder per line.',
   epic_library_paths: 'One Epic library folder per line.',
   protected_extra: 'Apps that must always remain unchanged, one name per line.',

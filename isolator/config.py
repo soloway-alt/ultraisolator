@@ -36,6 +36,10 @@ DEFAULT_CONFIG = {
     "probalance_cpu_threshold_pct": 15,
     "probalance_sustain_cycles": 4,
     "probalance_restore_cycles": 3,
+    # Observation-only heuristic: fullscreen + sustained-foreground candidates
+    # are SUGGESTED in the UI and never tuned without user confirmation, so it
+    # is safe to have on by default.
+    "enable_game_suggestions": True,
     "disable_timer_resolution_tweak": False,
     "disable_game_priority_boost": False,
     "game_close_debounce_s": 3,
@@ -90,6 +94,7 @@ CONFIG_SCHEMA = {
     "probalance_cpu_threshold_pct": {"type": "int", "min": 1, "max": 100, "restart_required": True},
     "probalance_sustain_cycles": {"type": "int", "min": 1, "max": 60, "restart_required": True},
     "probalance_restore_cycles": {"type": "int", "min": 1, "max": 60, "restart_required": True},
+    "enable_game_suggestions": {"type": "bool", "restart_required": True},
     "disable_timer_resolution_tweak": {"type": "bool", "restart_required": True},
     "disable_game_priority_boost": {"type": "bool", "restart_required": True},
     "game_close_debounce_s": {"type": "int", "min": 0, "max": 60, "restart_required": True},

@@ -51,6 +51,7 @@ class ParsedConfig:
     probalance_cpu_threshold_pct: int
     probalance_sustain_cycles: int
     probalance_restore_cycles: int
+    enable_game_suggestions: bool
     disable_timer_resolution_tweak: bool
     disable_game_priority_boost: bool
     game_close_debounce_s: float
@@ -120,6 +121,7 @@ class ParsedConfig:
             probalance_cpu_threshold_pct=owner._safe_int(config.get("probalance_cpu_threshold_pct", DEFAULT_CONFIG["probalance_cpu_threshold_pct"]), DEFAULT_CONFIG["probalance_cpu_threshold_pct"]),
             probalance_sustain_cycles=owner._safe_int(config.get("probalance_sustain_cycles", DEFAULT_CONFIG["probalance_sustain_cycles"]), DEFAULT_CONFIG["probalance_sustain_cycles"]),
             probalance_restore_cycles=owner._safe_int(config.get("probalance_restore_cycles", DEFAULT_CONFIG["probalance_restore_cycles"]), DEFAULT_CONFIG["probalance_restore_cycles"]),
+            enable_game_suggestions=bool(config.get("enable_game_suggestions", DEFAULT_CONFIG["enable_game_suggestions"])),
             disable_timer_resolution_tweak=bool(config.get("disable_timer_resolution_tweak", DEFAULT_CONFIG["disable_timer_resolution_tweak"])),
             disable_game_priority_boost=bool(config.get("disable_game_priority_boost", DEFAULT_CONFIG["disable_game_priority_boost"])),
             game_close_debounce_s=max(0.0, owner._safe_int(config.get("game_close_debounce_s", DEFAULT_CONFIG["game_close_debounce_s"]), DEFAULT_CONFIG["game_close_debounce_s"])),
@@ -177,6 +179,7 @@ class RuntimeState:
     library_scan_ready: object = field(default_factory=threading.Event)
     library_scan_thread: object = None
     discovery_issues: list = field(default_factory=list)
+    game_suggestions: list = field(default_factory=list)
     known_non_games: set = field(default_factory=set)
     path_classification_cache: dict = field(default_factory=dict)
     process_create_times: dict = field(default_factory=dict)
@@ -274,6 +277,7 @@ class EsportsIsolatorPro(
     probalance_cpu_threshold_pct = _parsed_config_alias("probalance_cpu_threshold_pct")
     probalance_sustain_cycles = _parsed_config_alias("probalance_sustain_cycles")
     probalance_restore_cycles = _parsed_config_alias("probalance_restore_cycles")
+    enable_game_suggestions = _parsed_config_alias("enable_game_suggestions")
     game_close_debounce_s = _parsed_config_alias("game_close_debounce_s")
     game_exit_restore_delay_s = _parsed_config_alias("game_exit_restore_delay_s")
     gc_full_collect_interval_s = _parsed_config_alias("gc_full_collect_interval_s")
@@ -425,6 +429,7 @@ class EsportsIsolatorPro(
         self._library_scan_ready = state.library_scan_ready
         self._library_scan_thread = state.library_scan_thread
         self._discovery_issues = state.discovery_issues
+        self._game_suggestions = state.game_suggestions
         self._known_non_games = state.known_non_games
         self._path_classification_cache = state.path_classification_cache
         self._process_create_times = state.process_create_times
@@ -592,6 +597,7 @@ class EsportsIsolatorPro(
                 for pid, entry in self._touched.items()
             ]
             process_create_times = dict(self._process_create_times)
+            game_suggestions = [dict(suggestion) for suggestion in self._game_suggestions]
 
         tracked_pids = {entry["pid"] for entry in entries}
         for pid, game in active_games.items():
@@ -651,6 +657,7 @@ class EsportsIsolatorPro(
             "process_mode": "tracked_only",
             "process_count": len(processes),
             "processes": processes,
+            "game_suggestions": game_suggestions,
             "generated_at": time.time(),
             "api": {
                 "process_snapshots": "tracked_only",

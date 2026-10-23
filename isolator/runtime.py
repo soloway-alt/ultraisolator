@@ -64,6 +64,13 @@ class MonitorCycle:
     # -- foreground tracking (persists) --
     last_fg_pid: int = 0
 
+    # -- game-suggestion candidate tracking (persists; _advance_game_suggestions owns) --
+    # The foreground pid currently being observed and when it first held the
+    # foreground; a suggestion requires the same pid to stay foreground for
+    # _SUGGESTION_MIN_FOREGROUND_S.
+    fg_candidate_pid: int = 0
+    fg_candidate_since: float = 0.0
+
     # -- housekeeping (persists) --
     last_cleanup: float = 0.0
 
@@ -126,6 +133,7 @@ class RuntimeHost(Protocol):
     probalance_cpu_threshold_pct: int
     probalance_sustain_cycles: int
     probalance_restore_cycles: int
+    enable_game_suggestions: bool
     _disable_game_priority_boost: bool
     _disable_timer_resolution_tweak: bool
     _disable_power_scheme_switch: bool
@@ -154,6 +162,7 @@ class RuntimeHost(Protocol):
     _known_non_games: set
     _path_classification_cache: dict
     _protected_cache: dict
+    _game_suggestions: list
     _library_scan_ready: threading.Event
     _last_topology_refresh: float
     _last_fg_transition_time: float
@@ -178,6 +187,9 @@ class RuntimeHost(Protocol):
     def _get_process_name(self, pid): ...
     def _is_game_name(self, name): ...
     def _is_game_name_normalized(self, normalized): ...
+    def _is_protected_process_name(self, name): ...
+    def _is_window_fullscreen(self, hwnd): ...
+    def _record_game_suggestion(self, name, pid, signals): ...
     def _request_library_scan(self, force=False): ...
     def _library_scan_due(self, now): ...
     # TuningMixin
@@ -203,6 +215,15 @@ class RuntimeHost(Protocol):
     def _recover_persistent_state(self, auto=False): ...
     def _recover_jail_state_from_crash(self, auto=False): ...
     def _write_power_recovery_state(self, original_scheme=None, switched=None, scheme_in_use=None): ...
+
+
+# A foreground app must hold the foreground this long before the suggestion
+# heuristic even looks at it; brief alt-tabs and splash screens never qualify.
+_SUGGESTION_MIN_FOREGROUND_S = 15.0
+# Modest CPU floor for the OPTIONAL cpu_load signal: real games idle above a
+# few percent of total machine capacity, but the signal is advisory only —
+# fullscreen + sustained foreground is already enough to suggest.
+_SUGGESTION_CPU_FLOOR_PCT = 5.0
 
 
 class RuntimeMixin:
@@ -720,6 +741,71 @@ class RuntimeMixin:
             self._last_fg_transition_time = now
         cycle.last_fg_pid = fg_pid
 
+    def _advance_game_suggestions(self, cycle, now, processes, cpu_samples):
+        """Record "looks like a game right now" suggestions for UI confirmation.
+
+        OBSERVATION ONLY — this step must NEVER call _jail_process,
+        _optimize_game_with_state, _boost_foreground, or any other tuning
+        method. It combines three signals on the sustained foreground pid
+        while no game is running: exclusive/borderless fullscreen (required),
+        sustained foreground of _SUGGESTION_MIN_FOREGROUND_S (required), and
+        a CPU-load reading (optional — cpu_samples can be empty and the
+        sample may simply be low). Matches are appended to the bounded
+        _game_suggestions store, which the user confirms in the UI before
+        the name ever reaches the games list.
+        """
+        if not self.enable_game_suggestions:
+            return
+        if cycle.current_game_pids:
+            # In game mode the foreground app IS the (already classified)
+            # game; drop any pending candidate so post-game timing restarts.
+            cycle.fg_candidate_pid = 0
+            cycle.fg_candidate_since = 0.0
+            return
+        fg_pid = cycle.last_fg_pid
+        if fg_pid <= 4 or fg_pid in (self._self_pid, self._parent_pid):
+            return
+        if fg_pid != cycle.fg_candidate_pid:
+            cycle.fg_candidate_pid = fg_pid
+            cycle.fg_candidate_since = now
+            return
+        if now - cycle.fg_candidate_since < _SUGGESTION_MIN_FOREGROUND_S:
+            return
+        name = ""
+        for pid, process_name in processes:
+            if int(pid) == fg_pid:
+                name = process_name
+                break
+        if not name:
+            return
+        if (
+            self._is_game_name_normalized(name)
+            or self._is_protected_process_name(name)
+            or name in _LAUNCHER_EXES
+        ):
+            return
+        with self._state_lock:
+            already_suggested = any(
+                entry.get("name") == name for entry in self._game_suggestions
+            )
+        if already_suggested:
+            return
+        # Re-query the foreground window for the fullscreen probe; bail when
+        # the foreground moved since _advance_foreground observed it.
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(self._fg_pid_dword))
+        if int(self._fg_pid_dword.value) != fg_pid:
+            return
+        if not self._is_window_fullscreen(hwnd):
+            return
+        signals = ["fullscreen", "sustained_foreground"]
+        cpu_pct = cpu_samples.get(fg_pid)
+        if cpu_pct is not None and cpu_pct >= _SUGGESTION_CPU_FLOOR_PCT:
+            signals.append("cpu_load")
+        self._record_game_suggestion(name, fg_pid, signals)
+
     def _monitor_loop(self):
         cycle = MonitorCycle.create(time.monotonic())
         _stop_event = self._stop_event
@@ -770,10 +856,15 @@ class RuntimeMixin:
             cycle.cleanup_ran = False
             cycle.game_mode_entered = False
             # ProBalance samples every cycle (game or idle) so the CPU-delta
-            # baselines are already warm when game mode starts; the compute
-            # is skipped entirely while the feature is off so the hot loop
-            # stays unchanged for everyone else.
-            cpu_samples = self._compute_cpu_samples(cycle, now) if self.enable_probalance else {}
+            # baselines are already warm when game mode starts; game
+            # suggestions reuse the same samples for their optional CPU
+            # signal. The compute is skipped entirely while both features
+            # are off so the hot loop stays unchanged for everyone else.
+            cpu_samples = (
+                self._compute_cpu_samples(cycle, now)
+                if (self.enable_probalance or self.enable_game_suggestions)
+                else {}
+            )
             try:
                 self._advance_game_tracking(cycle, now, processes)
                 self._advance_game_mode(cycle, now, processes)
@@ -782,6 +873,7 @@ class RuntimeMixin:
                 self._advance_gc_policy(cycle, now)
                 self._advance_power(cycle, now)
                 self._advance_foreground(cycle, now)
+                self._advance_game_suggestions(cycle, now, processes, cpu_samples)
             except Exception as exc:
                 # WHY: _log_once folds monitor exceptions by type plus a
                 # scrubbed message fingerprint, so distinct failures remain

@@ -2377,6 +2377,72 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dashboard-trust-item.needs-attention > strong {
     color: var(--eii-warning)
 }
+.game-suggestions {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--eii-border);
+    border-radius: var(--eii-radius);
+    background: var(--eii-surface)
+}
+.game-suggestions-detail {
+    margin: 0;
+    color: var(--eii-muted);
+    font-size: 12px;
+    line-height: 1.5
+}
+.game-suggestions-list {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none
+}
+.game-suggestion-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 8px 8px 12px;
+    border: 1px solid var(--eii-border);
+    border-radius: var(--eii-radius-sm);
+    background: var(--eii-surface-raised)
+}
+.game-suggestion-name {
+    overflow-wrap: anywhere;
+    color: var(--eii-text);
+    font-family: var(--eii-font-mono);
+    font-size: 13px
+}
+.game-suggestion-item button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 14px;
+    /* The accent hover shade instead of the raw accent: white 12px text on
+       --eii-accent is 3.85:1, below the 4.5:1 AA floor axe enforces. */
+    border: 1px solid #246ee0;
+    border-radius: var(--eii-radius-sm);
+    background: #246ee0;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: var(--eii-font-weight-semibold);
+    white-space: nowrap
+}
+.game-suggestion-item button:hover:not(:disabled) {
+    border-color: #1d5fd6;
+    background: #1d5fd6
+}
+.game-suggestion-item button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42
+}
+.game-suggestions-notice {
+    color: var(--eii-muted);
+    font-size: 12px
+}
 .dashboard-insights, .analysis-grid, .settings-grid, .topology-layout {
     gap: 16px
 }

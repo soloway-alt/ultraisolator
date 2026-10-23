@@ -12,14 +12,18 @@ from ctypes import wintypes
 from typing import Any, Protocol
 
 from .winapi import (
+    MONITOR_DEFAULTTONEAREST,
+    MONITORINFO,
     NON_GAME_DIR_PRUNE_TOKENS,
     NON_GAME_EXE_NAME_PATTERN,
     NON_GAME_PATH_TOKENS,
     PROCESS_QUERY_LIMITED_INFORMATION,
+    RECT,
     STATUS_INFO_LENGTH_MISMATCH,
     kernel32,
     nt_success,
     ntdll,
+    user32,
 )
 
 # WHY: Module-level constants — SPI-derived names hit _is_game_name_normalized
@@ -46,6 +50,11 @@ _PROTECTED_TITLE_TOKENS = ("easyanticheat", "battleye", "beservice", "vgc", "vgt
 # libraries can hold tens of thousands of files; without a budget one slow
 # disk turns a background refresh into minutes of I/O.
 LIBRARY_SCAN_BUDGET_S = 15.0
+
+# Bounded "looks like a game" suggestion store: enough for a session's worth
+# of unconfirmed candidates without letting a pathological foreground churn
+# grow the list (and the live snapshot payload) unbounded.
+GAME_SUGGESTION_LIMIT = 10
 
 
 class DiscoveryHost(Protocol):
@@ -95,6 +104,7 @@ class DiscoveryHost(Protocol):
     _ubisoft_games_cache: set
     _xbox_games_cache: set
     _discovery_issues: list
+    _game_suggestions: list
     _protected_cache: dict
     # NOTE: host-seeded but PUBLISHED by this mixin — _get_processes rewrites
     # it every poll cycle for TuningMixin's PID-reuse guards.
@@ -207,6 +217,31 @@ class DiscoveryMixin:
                 self._discovery_issues.append(issue)
                 if len(self._discovery_issues) > 50:
                     del self._discovery_issues[:-50]
+
+    def _record_game_suggestion(self, name, pid, signals):
+        """Append a bounded, name-deduped "looks like a game" suggestion.
+
+        OBSERVATION ONLY: suggestions are surfaced through get_live_snapshot
+        for the user to confirm in the UI; nothing here (or downstream of
+        here) may tune the process. Names already classified as games are
+        skipped so a suggestion can never duplicate the configured list or
+        the launcher caches.
+        """
+        normalized = self._normalize_name(name)
+        if not normalized or self._is_game_name_normalized(normalized):
+            return
+        suggestion = {
+            "name": normalized,
+            "pid": int(pid),
+            "first_seen": time.time(),
+            "signals": [str(signal) for signal in signals],
+        }
+        with self._state_lock:
+            if any(entry.get("name") == normalized for entry in self._game_suggestions):
+                return
+            self._game_suggestions.append(suggestion)
+            if len(self._game_suggestions) > GAME_SUGGESTION_LIMIT:
+                del self._game_suggestions[:-GAME_SUGGESTION_LIMIT]
 
     def _app_profile_for_name(self, name):
         normalized = name if name and "\\" not in str(name) and "/" not in str(name) else self._normalize_name(name)
@@ -423,6 +458,37 @@ class DiscoveryMixin:
     def _is_wow64_process(self, handle):
         result = wintypes.BOOL()
         return bool(kernel32.IsWow64Process(handle, ctypes.byref(result)) and result.value)
+
+    def _is_window_fullscreen(self, hwnd):
+        """Best-effort: does the window cover its monitor's full rect?
+
+        Both exclusive fullscreen and borderless-fullscreen windows report a
+        window rect equal to (or spanning past) the monitor rect from
+        MonitorFromWindow. Any Win32 failure answers False — the fullscreen
+        signal feeds only the game-suggestion heuristic, never tuning.
+        """
+        if not hwnd:
+            return False
+        try:
+            rect = RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return False
+            monitor = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+            if not monitor:
+                return False
+            info = MONITORINFO()
+            info.cbSize = ctypes.sizeof(MONITORINFO)
+            if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                return False
+            monitor_rect = info.rcMonitor
+            return (
+                rect.left <= monitor_rect.left
+                and rect.top <= monitor_rect.top
+                and rect.right >= monitor_rect.right
+                and rect.bottom >= monitor_rect.bottom
+            )
+        except Exception:
+            return False
 
     def _get_steam_path(self):
         try:

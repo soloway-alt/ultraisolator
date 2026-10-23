@@ -39,6 +39,7 @@ const DEFAULT_CONFIG = {
   probalance_cpu_threshold_pct: 15,
   probalance_sustain_cycles: 4,
   probalance_restore_cycles: 3,
+  enable_game_suggestions: true,
   disable_timer_resolution_tweak: false,
   disable_game_priority_boost: false,
   game_close_debounce_s: 3,
@@ -80,6 +81,7 @@ const CONFIG_SCHEMA = {
   probalance_cpu_threshold_pct: { type: 'int', min: 1, max: 100, restart_required: true },
   probalance_sustain_cycles: { type: 'int', min: 1, max: 60, restart_required: true },
   probalance_restore_cycles: { type: 'int', min: 1, max: 60, restart_required: true },
+  enable_game_suggestions: { type: 'bool', restart_required: true },
   disable_timer_resolution_tweak: { type: 'bool', restart_required: true },
   disable_game_priority_boost: { type: 'bool', restart_required: true },
   game_close_debounce_s: { type: 'int', min: 0, max: 60, restart_required: true },
@@ -135,6 +137,14 @@ const SNAPSHOT = {
   process_mode: 'live',
   process_count: PROCESSES.length,
   processes: PROCESSES,
+  game_suggestions: [
+    {
+      name: 'newgame.exe',
+      pid: 5150,
+      first_seen: 1710000004,
+      signals: ['fullscreen', 'sustained_foreground']
+    }
+  ],
   status: {
     running: true,
     game_mode: true,

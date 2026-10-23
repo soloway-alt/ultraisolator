@@ -74,6 +74,8 @@ __all__ = [
     "ULTIMATE_PERFORMANCE_GUID",
     "HIGH_PERFORMANCE_GUID",
     "POWER_ACCESS_SCHEME",
+    # Monitor / window geometry (fullscreen heuristic)
+    "MONITOR_DEFAULTTONEAREST",
     # DLL handles (carry the ctypes prototypes declared below)
     "kernel32",
     "ntdll",
@@ -86,6 +88,8 @@ __all__ = [
     # Structures
     "TOKEN_ELEVATION",
     "UNICODE_STRING",
+    "RECT",
+    "MONITORINFO",
     "SYSTEM_PROCESS_INFORMATION",
     "PROCESS_POWER_THROTTLING_STATE",
     "GUID",
@@ -274,6 +278,24 @@ class TOKEN_ELEVATION(ctypes.Structure):
 
 class UNICODE_STRING(ctypes.Structure):
     _fields_ = [("Length", wintypes.USHORT), ("MaximumLength", wintypes.USHORT), ("Buffer", wintypes.LPWSTR)]
+
+
+# Re-exported so engine modules take every Win32 shape from this curated
+# surface instead of importing wintypes piecemeal.
+RECT = wintypes.RECT
+
+# MonitorFromWindow fallback policy: resolve to the nearest monitor when the
+# window does not intersect any display.
+MONITOR_DEFAULTTONEAREST = 2
+
+
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+    ]
 
 
 class SYSTEM_PROCESS_INFORMATION(ctypes.Structure):
@@ -483,6 +505,12 @@ user32.GetForegroundWindow.argtypes = []
 user32.GetForegroundWindow.restype = wintypes.HWND
 user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+user32.GetWindowRect.restype = wintypes.BOOL
+user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+user32.MonitorFromWindow.restype = wintypes.HANDLE
+user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+user32.GetMonitorInfoW.restype = wintypes.BOOL
 
 powrprof.PowerGetActiveScheme.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.POINTER(GUID))]
 powrprof.PowerGetActiveScheme.restype = wintypes.DWORD
